@@ -3,7 +3,7 @@
 // Creation date: Friday 07 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Friday 07 February 2025 @ 16:58:30
+// Last modified: Friday 07 February 2025 @ 16:54:52
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -27,17 +27,61 @@
 // SOFTWARE.
 
 use std::{
-    fmt::{Debug, Formatter},
+    fmt::{Debug, Display, Formatter},
     str::FromStr,
 };
 
+use curve25519_dalek::edwards::CompressedEdwardsY;
 use ed25519_dalek::{VerifyingKey, PUBLIC_KEY_LENGTH};
+use tracing::{debug, instrument};
 
 use super::error::Error;
 
+/// A public key
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Pubkey {
+    /// Byte representation of the public key.
     key: [u8; PUBLIC_KEY_LENGTH],
+}
+
+impl Pubkey {
+    /// Creates a public key from an array of bytes.
+    ///
+    /// # Parameters
+    /// * `bytes` - Byte array of length 32 representing the public key.
+    ///
+    /// # Returns
+    /// The newly created public key.
+    ///
+    /// # Example
+    /// ```rust
+    /// # use bifrost::crypto::Pubkey;
+    /// let array = [0_u8; 32];
+    /// let pubkey = Pubkey::from_bytes(&array);
+    /// ```
+    #[must_use]
+    pub const fn from_bytes(bytes: &[u8; PUBLIC_KEY_LENGTH]) -> Self {
+        Self { key: *bytes }
+    }
+
+    /// Check if the public key is on or off the `ed25519` curve
+    ///
+    /// # Returns
+    /// `true` if the public key is on the `ed25519` curve, false otherwise.
+    ///
+    /// # Example
+    /// ```rust
+    /// # use bifrost::crypto::{Keypair, Error};
+    /// let key = Keypair::generate()?.pubkey();
+    /// assert!(key.is_oncurve());
+    ///
+    /// # Ok::<(), Error>(())
+    /// ```
+    #[instrument(skip_all, fields(%self))]
+    pub fn is_oncurve(&self) -> bool {
+        debug!("checking if key is on curve");
+        matches!(CompressedEdwardsY::from_slice(&self.key), Ok(key) if key.decompress().is_some())
+    }
 }
 
 impl From<VerifyingKey> for Pubkey {
@@ -62,5 +106,18 @@ impl Debug for Pubkey {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let encoded = bs58::encode(&self.key).into_string();
         write!(f, "{encoded}")
+    }
+}
+
+impl Display for Pubkey {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let encoded = bs58::encode(&self.key).into_string();
+        write!(f, "{encoded}")
+    }
+}
+
+impl AsRef<[u8]> for Pubkey {
+    fn as_ref(&self) -> &[u8] {
+        &self.key
     }
 }

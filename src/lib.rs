@@ -3,7 +3,7 @@
 // Creation date: Friday 07 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Friday 07 February 2025 @ 16:58:30
+// Last modified: Friday 07 February 2025 @ 15:51:43
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -33,4 +33,5 @@
 #![cfg_attr(not(feature = "test"), allow(dead_code, clippy::allow_attributes))]
 #![warn(missing_docs)]
 
-mod crypto;
+/// Definition of all cryptography related operations
+pub mod crypto;

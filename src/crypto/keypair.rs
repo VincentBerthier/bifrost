@@ -3,7 +3,7 @@
 // Creation date: Friday 07 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Friday 07 February 2025 @ 16:58:30
+// Last modified: Friday 07 February 2025 @ 16:57:41
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -31,17 +31,36 @@ use std::sync::{Mutex, OnceLock};
 use ed25519_dalek::{SigningKey, KEYPAIR_LENGTH};
 use rand::SeedableRng as _;
 use rand_chacha::ChaCha20Rng;
+use tracing::{debug, info, instrument};
 
 use super::{pubkey::Pubkey, Error, Result};
 
 static RNG: OnceLock<Mutex<ChaCha20Rng>> = OnceLock::new();
 
-struct Keypair {
+/// A private key
+pub struct Keypair {
+    /// Byte representation of the private key.
     key: [u8; KEYPAIR_LENGTH],
 }
 
 impl Keypair {
-    fn generate() -> Result<Self> {
+    /// Randomly generates a private key.
+    ///
+    /// # Returns
+    /// A private key
+    ///
+    /// # Errors
+    /// If the lock on the random engine could not be obtained.
+    ///
+    /// # Example
+    /// ```rust
+    /// # use bifrost::crypto::{Keypair, Error};
+    /// let key = Keypair::generate()?;
+    /// # Ok::<(), Error>(())
+    /// ```
+    #[instrument]
+    pub fn generate() -> Result<Self> {
+        debug!("generating new keypair");
         let key = {
             let mut rng = RNG
                 .get_or_init(init_rand_engine)
@@ -54,7 +73,23 @@ impl Keypair {
         })
     }
 
+    /// Get the public key associated with the private key.
+    ///
+    /// # Returns
+    /// The public key of the private key.
+    ///
+    /// # Example
+    /// ```rust
+    /// # use bifrost::crypto::{Keypair, Error};
+    /// let private_key = Keypair::generate()?;
+    /// let public_key = private_key.pubkey();
+    ///
+    /// # Ok::<(), Error>(())
+    /// ```
+    #[instrument(skip_all)]
+    #[must_use]
     pub fn pubkey(&self) -> Pubkey {
+        debug!("getting pubkey");
         #[expect(clippy::unwrap_used, reason = "array is guaranteed to be right here")]
         let keypair = SigningKey::from_keypair_bytes(&self.key).unwrap();
         keypair.verifying_key().into()
@@ -63,6 +98,7 @@ impl Keypair {
 
 #[cfg(test)]
 fn init_rand_engine() -> Mutex<ChaCha20Rng> {
+    info!("Initialized keypair random generator in TEST MODE");
     let seed = 0_u64;
     let rng = ChaCha20Rng::seed_from_u64(seed);
 
@@ -72,6 +108,7 @@ fn init_rand_engine() -> Mutex<ChaCha20Rng> {
 #[cfg_attr(coverage_nightly, coverage(off))]
 #[cfg(not(test))]
 fn init_rand_engine() -> Mutex<ChaCha20Rng> {
+    info!("Initialized keypair random generator");
     let rng = ChaCha20Rng::from_entropy();
 
     Mutex::new(rng)
@@ -83,17 +120,17 @@ mod tests {
 
     use super::*;
     type Error = Box<dyn core::error::Error>;
-    type Result<T> = core::result::Result<T, Error>;
+    type TestResult = core::result::Result<(), Error>;
 
     #[test]
-    fn generate_keypair() -> Result<()> {
+    fn generate_keypair() -> TestResult {
         let _ = Keypair::generate()?;
 
         Ok(())
     }
 
     #[test]
-    fn get_pubkey() -> Result<()> {
+    fn get_pubkey() -> TestResult {
         // When
         let keypair = Keypair::generate()?;
         let pubkey = keypair.pubkey();
@@ -103,6 +140,7 @@ mod tests {
             pubkey,
             "H1LS9EF2cPrmmM828buVJSvvbztLc9buJPHMpqTmgEpa".parse()?
         );
+        assert!(pubkey.is_oncurve());
 
         Ok(())
     }

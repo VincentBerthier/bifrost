@@ -8,7 +8,7 @@ mod tests {
   
     use super::*;
     type Error = Box<dyn core::error::Error>;
-    type Result<T> = core::result::Result<T, Error>;
+    type TestResult = core::result::Result<(), Error>;
 
     #[test]
     fn $1() -> Result<()> {
@@ -62,16 +62,18 @@ body = """
 /// ${1:Description.}$0
 ///
 /// # Parameters
-/// * `${3:`argument_name`} - ${4:type and description},
+/// * `${3:`argument_name`}` - ${4:type and description},
 ///
 /// # Returns
 /// ${2:type and description of the returned object}
 ///
 /// # Example
 /// ```rust
-/// ${5:write me later}
-/// ```
-"""
+/// # use core::error::Error;
+/// // ${5:write me later}
+///
+/// # Ok::<(), Error>(())
+/// ```"""
 description = "A rust comment with description, parameters, returns and examples."
 
 [[snippets]]

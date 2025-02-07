@@ -3,7 +3,7 @@
 // Creation date: Friday 07 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Friday 07 February 2025 @ 16:58:30
+// Last modified: Friday 07 February 2025 @ 16:18:40
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -30,11 +30,19 @@ use std::array::TryFromSliceError;
 
 use derive_more::derive::{Display, From};
 
+/// Errors of the cryptography module.
 #[derive(Debug, Display, From)]
 pub enum Error {
+    /// Impossible to generate an off curve public key with the given seeds.
+    NoOffcurveKeyForSeeds,
+    /// Could not obtain the lock on the random engine used to generate private keys.
     RandomEnginePoisonedLock,
+    /// Tried to used too many seeds to derive a public key.
+    TooManySeeds,
+    /// Tried to cast a byte array of the wrong length.
     #[from]
     InvalidArrayLength(TryFromSliceError),
+    /// Could not decode a string as `base58`
     #[from]
     Bs58Decoding(bs58::decode::Error),
 }
