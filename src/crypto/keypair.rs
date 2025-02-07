@@ -3,7 +3,7 @@
 // Creation date: Friday 07 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Friday 07 February 2025 @ 17:30:50
+// Last modified: Saturday 08 February 2025 @ 01:05:18
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -26,7 +26,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use std::sync::{Mutex, OnceLock};
+use std::{
+    fmt,
+    sync::{Mutex, OnceLock},
+};
 
 use ed25519_dalek::{ed25519::signature::Signer, SigningKey, KEYPAIR_LENGTH};
 use rand::SeedableRng as _;
@@ -121,6 +124,12 @@ impl Keypair {
         #[expect(clippy::unwrap_used)]
         let key = SigningKey::from_keypair_bytes(&self.key).unwrap();
         key.sign(message.as_ref()).into()
+    }
+}
+
+impl fmt::Debug for Keypair {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Keypair (pubkey: {})", self.pubkey())
     }
 }
 

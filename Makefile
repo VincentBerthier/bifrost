@@ -65,11 +65,12 @@ tests: $(SOURCES)
 
 .PHONY = mutants
 mutants: $(SOURCES)
-	cargo mutants --test-tool=nextest -e main.rs
+	cargo mutants --test-tool=nextest -e main.rs -E 'impl Debug'
 
 .PHONY = coverage
 coverage: $(SOURCES) Cargo.toml
 	cargo llvm-cov clean --profraw-only
+	rm -rf target/llvm-cov-pretty
 	cargo llvm-cov --no-report --locked --all-features nextest
 	cargo llvm-cov --all-features --doc --no-report
 	cargo llvm-cov report --doctests --ignore-filename-regex='(main.rs$$)' --json --output-path ./target/coverage.json

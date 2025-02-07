@@ -1,9 +1,9 @@
-// File: src/lib.rs
+// File: src/error.rs
 // Project: Bifrost
-// Creation date: Friday 07 February 2025
+// Creation date: Saturday 08 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Saturday 08 February 2025 @ 16:21:01
+// Last modified: Saturday 08 February 2025 @ 16:25:54
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -26,21 +26,17 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-//! The main library crate for the Bifrost blockchain.
+use derive_more::derive::{Display, From};
 
-#![feature(assert_matches)]
-#![feature(coverage_attribute)]
-#![cfg_attr(not(feature = "test"), allow(dead_code, clippy::allow_attributes))]
-#![warn(missing_docs)]
+/// Errors of the Bifrost library.
+#[derive(Debug, Display, From)]
+pub enum Error {
+    /// An error caused by the cryptography module.
+    #[from]
+    Crypto(crate::crypto::Error),
+    /// An error caused by the accounts module.
+    #[from]
+    Account(crate::account::Error),
+}
 
-/// Errors that can happen anywhere in the blockchain.
-mod error;
-
-/// Definition of all things related to the accounts.
-pub mod account;
-/// Definition of all cryptography related operations
-pub mod crypto;
-/// Definition of transaction and base instructions.
-pub mod transaction;
-
-pub use error::Error;
+impl core::error::Error for Error {}

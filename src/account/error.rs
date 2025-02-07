@@ -1,9 +1,9 @@
-// File: src/lib.rs
+// File: src/account/error.rs
 // Project: Bifrost
-// Creation date: Friday 07 February 2025
+// Creation date: Saturday 08 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Saturday 08 February 2025 @ 16:21:01
+// Last modified: Saturday 08 February 2025 @ 16:09:45
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -26,21 +26,32 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-//! The main library crate for the Bifrost blockchain.
+use derive_more::derive::{Display, From};
 
-#![feature(assert_matches)]
-#![feature(coverage_attribute)]
-#![cfg_attr(not(feature = "test"), allow(dead_code, clippy::allow_attributes))]
-#![warn(missing_docs)]
+use crate::crypto::Pubkey;
 
-/// Errors that can happen anywhere in the blockchain.
-mod error;
+use super::types::AccountType;
 
-/// Definition of all things related to the accounts.
-pub mod account;
-/// Definition of all cryptography related operations
-pub mod crypto;
-/// Definition of transaction and base instructions.
-pub mod transaction;
+/// Errors of the account module.
+#[derive(Debug, Display, From)]
+pub enum Error {
+    /// Invalid key used to create account metadata
+    #[display("invalid key use: {} (error: {:?})", key, kind)]
+    MetaAccountCreation {
+        /// The key that was used
+        key: Pubkey,
+        /// The type of error
+        kind: ErrorType,
+    },
+    /// Tried to merge accounts  of different types
+    #[display("tried to merge accounts of different types ({:?}, {:?})", _0, _1)]
+    MergeIncompatibleAccountTypes(AccountType, AccountType),
+}
 
-pub use error::Error;
+#[derive(Debug)]
+pub enum ErrorType {
+    NonWalletOnCurve,
+    WalletNotOnCurve,
+}
+
+impl core::error::Error for Error {}

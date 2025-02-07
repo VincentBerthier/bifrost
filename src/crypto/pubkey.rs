@@ -3,7 +3,7 @@
 // Creation date: Friday 07 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Friday 07 February 2025 @ 18:01:46
+// Last modified: Saturday 08 February 2025 @ 01:41:42
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -31,6 +31,7 @@ use std::{
     str::FromStr,
 };
 
+use borsh::{BorshDeserialize, BorshSerialize};
 use curve25519_dalek::edwards::CompressedEdwardsY;
 use ed25519_dalek::{VerifyingKey, PUBLIC_KEY_LENGTH};
 use tracing::{debug, instrument};
@@ -38,7 +39,7 @@ use tracing::{debug, instrument};
 use super::error::Error;
 
 /// A public key
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
 pub struct Pubkey {
     /// Byte representation of the public key.
     key: [u8; PUBLIC_KEY_LENGTH],

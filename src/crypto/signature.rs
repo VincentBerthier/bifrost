@@ -3,7 +3,7 @@
 // Creation date: Friday 07 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Friday 07 February 2025 @ 18:01:46
+// Last modified: Friday 07 February 2025 @ 21:06:11
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -28,12 +28,14 @@
 
 use std::fmt;
 
+use borsh::{BorshDeserialize, BorshSerialize};
 use ed25519_dalek::{VerifyingKey, SIGNATURE_LENGTH};
 use tracing::{debug, instrument};
 
 use super::{Pubkey, Result};
 
 /// The signature of a transaction.
+#[derive(Copy, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
 pub struct Signature {
     data: [u8; SIGNATURE_LENGTH],
 }

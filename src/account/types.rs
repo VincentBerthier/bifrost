@@ -1,9 +1,9 @@
-// File: src/lib.rs
+// File: src/account/types.rs
 // Project: Bifrost
-// Creation date: Friday 07 February 2025
+// Creation date: Saturday 08 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Saturday 08 February 2025 @ 16:21:01
+// Last modified: Saturday 08 February 2025 @ 16:17:11
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -26,21 +26,37 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-//! The main library crate for the Bifrost blockchain.
+use std::mem::discriminant;
 
-#![feature(assert_matches)]
-#![feature(coverage_attribute)]
-#![cfg_attr(not(feature = "test"), allow(dead_code, clippy::allow_attributes))]
-#![warn(missing_docs)]
+use borsh::{BorshDeserialize, BorshSerialize};
 
-/// Errors that can happen anywhere in the blockchain.
-mod error;
+/// Determines if an account is read-only or writable
+#[derive(Clone, Copy, Debug, Default, BorshSerialize, BorshDeserialize)]
+pub enum Writable {
+    /// The account is writable
+    Yes,
+    /// The account is read-only.
+    #[default]
+    No,
+}
 
-/// Definition of all things related to the accounts.
-pub mod account;
-/// Definition of all cryptography related operations
-pub mod crypto;
-/// Definition of transaction and base instructions.
-pub mod transaction;
+/// The type of account.
+#[derive(Clone, Copy, Debug, BorshDeserialize, BorshSerialize)]
+pub enum AccountType {
+    /// An account containing a program
+    Program,
+    /// A specialized wallet signing a transaction.
+    Signing,
+    /// A user's wallet (used only as identification)
+    Wallet,
+}
 
-pub use error::Error;
+impl AccountType {
+    pub const fn is_wallet(self) -> bool {
+        matches!(self, Self::Wallet | Self::Signing)
+    }
+
+    pub fn is_compatible(self, other: Self) -> bool {
+        (self.is_wallet() && other.is_wallet()) || (discriminant(&self) == discriminant(&other))
+    }
+}

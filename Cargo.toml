@@ -63,6 +63,7 @@ used_underscore_binding = { level = "allow", priority = 1 }
 empty_docs = { level = "allow", priority = 1 }
 wildcard_imports = { level = "allow", priority = 1 }
 missing_panics_doc = { level = "allow", priority = 1 }
+module_inception = { level = "allow", priority = 1 }
 
 # Restriction lints
 # absolute_paths = { level = "warn", priority = 1 }
