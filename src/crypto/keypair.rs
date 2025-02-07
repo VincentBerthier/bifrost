@@ -3,7 +3,7 @@
 // Creation date: Friday 07 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Friday 07 February 2025 @ 16:57:41
+// Last modified: Friday 07 February 2025 @ 17:30:50
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -28,12 +28,12 @@
 
 use std::sync::{Mutex, OnceLock};
 
-use ed25519_dalek::{SigningKey, KEYPAIR_LENGTH};
+use ed25519_dalek::{ed25519::signature::Signer, SigningKey, KEYPAIR_LENGTH};
 use rand::SeedableRng as _;
 use rand_chacha::ChaCha20Rng;
 use tracing::{debug, info, instrument};
 
-use super::{pubkey::Pubkey, Error, Result};
+use super::{pubkey::Pubkey, Error, Result, Signature};
 
 static RNG: OnceLock<Mutex<ChaCha20Rng>> = OnceLock::new();
 
@@ -93,6 +93,34 @@ impl Keypair {
         #[expect(clippy::unwrap_used, reason = "array is guaranteed to be right here")]
         let keypair = SigningKey::from_keypair_bytes(&self.key).unwrap();
         keypair.verifying_key().into()
+    }
+
+    /// Sign a message.
+    ///
+    /// # Parameters
+    /// * `message` - The message to sign,
+    ///
+    /// # Returns
+    /// The signature of the message
+    ///
+    /// # Example
+    /// ```rust
+    /// # use bifrost::crypto::{Keypair, Error};
+    /// let key = Keypair::generate()?;
+    /// let message = b"some message";
+    /// let signature = key.sign(message);
+    ///
+    /// # Ok::<(), Error>(())
+    /// ```
+    #[instrument(skip_all, fields(key = ?self.pubkey()))]
+    pub fn sign<B>(&self, message: B) -> Signature
+    where
+        B: AsRef<[u8]>,
+    {
+        debug!("signing message");
+        #[expect(clippy::unwrap_used)]
+        let key = SigningKey::from_keypair_bytes(&self.key).unwrap();
+        key.sign(message.as_ref()).into()
     }
 }
 

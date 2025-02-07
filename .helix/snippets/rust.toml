@@ -8,10 +8,10 @@ mod tests {
   
     use super::*;
     type Error = Box<dyn core::error::Error>;
-    type TestResult = core::result::Result<(), Error>;
+    type Result<T> = core::result::Result<T, Error>;
 
     #[test]
-    fn $1() -> Result<()> {
+    fn $1() -> TestResult {
         // Given
         $2
 
@@ -29,7 +29,7 @@ description = "add a test module"
 prefix = "tst"
 scope = ["rust"]
 body = """#[test]
-fn $1() -> Result<()> {
+fn $1() -> TestResult {
     // Given
     $2
 
@@ -44,7 +44,7 @@ description = "Add a test"
 prefix = "tst"
 scope = ["rust"]
 body = """#[test(tokio::test)]
-async fn $1() -> Result<()> {
+async fn $1() -> TestResult {
     // Given
     $2
 
@@ -69,11 +69,9 @@ body = """
 ///
 /// # Example
 /// ```rust
-/// # use core::error::Error;
 /// // ${5:write me later}
-///
-/// # Ok::<(), Error>(())
-/// ```"""
+/// ```
+"""
 description = "A rust comment with description, parameters, returns and examples."
 
 [[snippets]]

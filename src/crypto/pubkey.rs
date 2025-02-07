@@ -3,7 +3,7 @@
 // Creation date: Friday 07 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Friday 07 February 2025 @ 16:54:52
+// Last modified: Friday 07 February 2025 @ 18:01:46
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -92,6 +92,13 @@ impl From<VerifyingKey> for Pubkey {
     }
 }
 
+#[expect(clippy::unwrap_used, clippy::fallible_impl_from)]
+impl From<&Pubkey> for VerifyingKey {
+    fn from(value: &Pubkey) -> Self {
+        Self::from_bytes(&value.key).unwrap()
+    }
+}
+
 impl FromStr for Pubkey {
     type Err = Error;
 
@@ -102,6 +109,7 @@ impl FromStr for Pubkey {
     }
 }
 
+#[mutants::skip]
 impl Debug for Pubkey {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let encoded = bs58::encode(&self.key).into_string();
@@ -109,6 +117,7 @@ impl Debug for Pubkey {
     }
 }
 
+#[mutants::skip]
 impl Display for Pubkey {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let encoded = bs58::encode(&self.key).into_string();
@@ -116,6 +125,7 @@ impl Display for Pubkey {
     }
 }
 
+#[mutants::skip]
 impl AsRef<[u8]> for Pubkey {
     fn as_ref(&self) -> &[u8] {
         &self.key

@@ -3,7 +3,7 @@
 // Creation date: Friday 07 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Friday 07 February 2025 @ 16:35:59
+// Last modified: Friday 07 February 2025 @ 17:07:36
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -30,10 +30,12 @@ mod error;
 mod keypair;
 mod pubkey;
 mod seeds;
+mod signature;
 
 pub use keypair::Keypair;
 pub use pubkey::Pubkey;
 pub use seeds::Seeds;
+pub use signature::Signature;
 
 pub use error::Error;
 type Result<T> = core::result::Result<T, Error>;

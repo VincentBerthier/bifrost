@@ -3,7 +3,7 @@
 // Creation date: Friday 07 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Friday 07 February 2025 @ 16:53:30
+// Last modified: Friday 07 February 2025 @ 18:01:46
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -33,6 +33,7 @@ use tracing::{debug, instrument, trace, warn};
 
 use super::{pubkey::Pubkey, Error, Result};
 
+const GENERATED_KEY_SEED: &[u8] = b"OffCurvePubkey";
 const MAX_SEEDS: usize = 32;
 
 /// The seeds to use to derive an off-curve public key.
@@ -68,17 +69,12 @@ impl Seeds {
         S: AsRef<[u8]>,
     {
         debug!("creating new Seed");
-        if seeds.len() > MAX_SEEDS {
-            warn!("tried to set too many seeds");
-            return Err(Error::TooManySeeds);
-        }
-        let mut hasher = Sha256::new();
-        seeds.iter().for_each(|seed| hasher.update(seed));
-        Ok(Self {
-            n: seeds.len(),
-            hasher,
-        })
+        let hasher = Sha256::new();
+        let mut res = Self { n: 0, hasher };
+        res.add(seeds)?;
+        Ok(res)
     }
+
     /// Add new seeds
     ///
     /// # Parameters
@@ -97,10 +93,12 @@ impl Seeds {
     ///
     /// # Ok::<(), Error>(())
     /// ```
+    #[instrument(skip_all)]
     pub fn add<S>(&mut self, seeds: &[S]) -> Result<()>
     where
         S: AsRef<[u8]>,
     {
+        debug!("adding seeds");
         let n = seeds.len();
         if n + self.n > MAX_SEEDS {
             warn!("tried to set too many seeds");
@@ -143,11 +141,7 @@ impl Seeds {
     pub fn generate_offcurve(&self) -> Result<(Pubkey, u8)> {
         debug!("generation off-curve public key");
         for bump in 0..255 {
-            trace!("trying with bump {bump}");
-            let mut hasher = self.hasher.clone();
-            hasher.update([bump]);
-            let hash = hasher.finalize();
-            let pubkey = Pubkey::from_bytes(&hash.as_slice().try_into()?);
+            let pubkey = self.generate_offcurve_with_bump(bump)?;
             if !pubkey.is_oncurve() {
                 trace!("resulting key '{pubkey}' is off-curve, returning");
                 return Ok((pubkey, bump));
@@ -157,8 +151,18 @@ impl Seeds {
         warn!("could not generate an off-curve public key with the given seeds!");
         Err(Error::NoOffcurveKeyForSeeds)
     }
+
+    fn generate_offcurve_with_bump(&self, bump: u8) -> Result<Pubkey> {
+        trace!("trying with bump {bump}");
+        let mut hasher = self.hasher.clone();
+        hasher.update([bump]);
+        hasher.update(GENERATED_KEY_SEED);
+        let hash = hasher.finalize();
+        Ok(Pubkey::from_bytes(&hash.as_slice().try_into()?))
+    }
 }
 
+#[mutants::skip]
 impl Debug for Seeds {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Seeds {{ n: {}}}", self.n)
@@ -190,6 +194,10 @@ mod tests {
         let generated = seeds.generate_offcurve()?.0;
 
         // Then
+        assert_eq!(
+            generated,
+            "HvkkZN4pSTTo9wkCKhpTQ5pQ79fzjEVu2WJwu1mYH3Wk".parse()?
+        );
         assert!(!generated.is_oncurve());
 
         Ok(())

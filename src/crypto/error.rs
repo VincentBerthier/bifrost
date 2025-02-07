@@ -3,7 +3,7 @@
 // Creation date: Friday 07 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Friday 07 February 2025 @ 16:18:40
+// Last modified: Friday 07 February 2025 @ 17:16:35
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -29,6 +29,7 @@
 use std::array::TryFromSliceError;
 
 use derive_more::derive::{Display, From};
+use ed25519_dalek::SignatureError;
 
 /// Errors of the cryptography module.
 #[derive(Debug, Display, From)]
@@ -45,6 +46,9 @@ pub enum Error {
     /// Could not decode a string as `base58`
     #[from]
     Bs58Decoding(bs58::decode::Error),
+    /// Failed to verify a signature
+    #[from]
+    Signature(SignatureError),
 }
 
 impl core::error::Error for Error {}
