@@ -1,0 +1,87 @@
+[[snippets]]
+prefix = "tstmod"
+scope = ["rust"]
+body = """#[cfg(test)]
+mod tests {
+
+    use test_log::test;
+  
+    use super::*;
+    type Error = Box<dyn core::error::Error>;
+    type Result<T> = core::result::Result<T, Error>;
+
+    #[test]
+    fn $1() -> Result<()> {
+        // Given
+        $2
+
+        // When
+
+        // Then
+
+        Ok(())
+    }
+}
+"""
+description = "add a test module"
+
+[[snippets]]
+prefix = "tst"
+scope = ["rust"]
+body = """#[test]
+fn $1() -> Result<()> {
+    // Given
+    $2
+
+    // When
+
+    // Then
+}
+"""
+description = "Add a test"
+
+[[snippets]]
+prefix = "tst"
+scope = ["rust"]
+body = """#[test(tokio::test)]
+async fn $1() -> Result<()> {
+    // Given
+    $2
+
+    // When
+
+    // Then
+}
+"""
+description = "Add an asynchronous test"
+
+[[snippets]]
+prefix = "doc"
+scope = ["rust"]
+body = """
+/// ${1:Description.}$0
+///
+/// # Parameters
+/// * `${3:`argument_name`} - ${4:type and description},
+///
+/// # Returns
+/// ${2:type and description of the returned object}
+///
+/// # Example
+/// ```rust
+/// ${5:write me later}
+/// ```
+"""
+description = "A rust comment with description, parameters, returns and examples."
+
+[[snippets]]
+prefix = "//!"
+"body" = """
+//! ${1:Description.}$0",
+//!",
+//! # Examples",
+//! ```rust",
+//! ${2:write me later}",
+//! ```"
+"""
+description = "A special Rust comment to describe a crate, with description and examples."

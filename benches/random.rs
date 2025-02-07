@@ -3,7 +3,7 @@
 // Creation date: Monday 27 January 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Monday 27 January 2025 @ 10:48:08
+// Last modified: Friday 07 February 2025 @ 15:33:43
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -26,19 +26,42 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+#![expect(clippy::unwrap_used)]
+
+use std::sync::{Mutex, OnceLock};
+
 use criterion::{criterion_group, criterion_main, Criterion};
 use ed25519_dalek::SigningKey;
-use rand::{rngs::OsRng, SeedableRng as _};
+use rand::{rngs::OsRng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
+
+static RNG: OnceLock<Mutex<ChaCha20Rng>> = OnceLock::new();
 
 fn draw_osrns() -> SigningKey {
     let mut rng = OsRng;
     SigningKey::generate(&mut rng)
 }
 
-fn draw_chacha20() -> SigningKey {
+fn draw_chacha20_entropy() -> SigningKey {
     let mut rng = ChaCha20Rng::from_entropy();
     SigningKey::generate(&mut rng)
+}
+
+fn draw_chacha20_seed() -> SigningKey {
+    let mut rng = ChaCha20Rng::seed_from_u64(0);
+    SigningKey::generate(&mut rng)
+}
+
+fn draw_with_static() -> SigningKey {
+    let mut rng = RNG.get_or_init(init_rand_engine).lock().unwrap();
+    SigningKey::generate(&mut *rng)
+}
+
+fn init_rand_engine() -> Mutex<ChaCha20Rng> {
+    let seed = 0_u64;
+    let rng = ChaCha20Rng::seed_from_u64(seed);
+
+    Mutex::new(rng)
 }
 
 pub fn random_benchmark(c: &mut Criterion) {
@@ -46,8 +69,14 @@ pub fn random_benchmark(c: &mut Criterion) {
     group.bench_function("OsRng", |b| {
         b.iter(draw_osrns);
     });
-    group.bench_function("ChaCha20", |b| {
-        b.iter(draw_chacha20);
+    group.bench_function("ChaCha20 (seed)", |b| {
+        b.iter(draw_chacha20_seed);
+    });
+    group.bench_function("ChaCha20 (entropy)", |b| {
+        b.iter(draw_chacha20_entropy);
+    });
+    group.bench_function("ChaCha20 (with static)", |b| {
+        b.iter(draw_with_static);
     });
 }
 
