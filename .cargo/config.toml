@@ -1,0 +1,14 @@
+[build]
+rustflags = [
+  "--cfg",
+  "tokio_unstable",
+  "-Clink-arg=-Wl,--no-rosegment",
+  "-Ctarget-cpu=native",
+  "-Clink-arg=-fuse-ld=mold",
+]
+
+# [unstable]
+# codegen-backend = true
+
+# [profile.dev]
+# codegen-backend = "cranelift"

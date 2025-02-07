@@ -1,0 +1,116 @@
+# To test locally: https://github.com/nektos/act
+
+name: Tests
+on:
+  pull_request:
+  push:
+env:
+  RUST_VERSION: "nightly-2025-01-28"
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+        name: Environment setup
+        with:
+          install-rust: true
+          initial: true
+
+  fmt:
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Seting up environment
+        uses: ./.github/actions/setup
+      - name: Check formatting 
+        run: | 
+          cargo fmt --check --all
+           
+      
+  spellcheck:
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Seting up environment
+        uses: ./.github/actions/setup
+      - name: Spellcheck
+        run: cargo spellcheck --code 1
+      
+  audit:
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Seting up environment
+        uses: ./.github/actions/setup
+      - name: Audit
+        run: cargo audit
+      
+  deny:
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Seting up environment
+        uses: ./.github/actions/setup
+      - name: Deny
+        run: cargo deny check
+
+
+  clippy:
+    needs: [fmt, spellcheck, deny, audit]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Seting up environment
+        uses: ./.github/actions/setup
+        with:
+          install-mold: true
+      - name: Cache setup
+        uses: actions/cache@v4
+        with:
+          path: target/
+          key: clippy-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+      - name: Run clippy
+        run: |
+          cargo clippy --all-features --workspace --all-targets -- -Dwarnings
+
+
+  tests:
+    needs: [clippy]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # - name: Free space
+      #   if: ${{ steps.dependency-cache.outputs.cache-hit != 'true' }}
+      #   uses: ./.github/actions/free_space
+      - name: Seting up environment
+        uses: ./.github/actions/setup
+        with:
+          install-mold: true
+      - name: Cache setup
+        id: dependency-cache
+        uses: actions/cache@v4
+        with:
+          path: target/
+          key: tests-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+      - name: Running tests
+        run: |
+          export RUSTFLAGS='-C link-arg=-fuse-ld=mold --cfg tokio_unstable -C instrument-coverage --cfg=coverage --cfg=coverage_nightly --cfg=trybuild_no_target'
+          export LLVM_PROFILE_FILE="$(pwd)/target/bangk-offchain-%p-%24m.profraw"
+          export CARGO_LLVM_COV=1
+          export CARGO_LLVM_COV_SHOW_ENV=1
+          export CARGO_LLVM_COV_TARGET_DIR=$(pwd)/target
+          cargo nextest run --all-features --all-targets
+          cargo test --doc --all-features
+          cargo llvm-cov report --doctests --ignore-filename-regex="(main).rs" --lcov --output-path lcov.info
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: VincentBerthier/bifrost
+          files: lcov.info

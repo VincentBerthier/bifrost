@@ -1,0 +1,20 @@
+experimental = ["setup-scripts"]
+
+[profile.default]
+slow-timeout = { period = "10s", terminate-after = 2 }
+
+# [script.script1]
+# command = "./script/something.sh"
+# capture-stdout = true
+# capture-stderr = true
+
+# [[profile.default.scripts]]
+# filter = "test(whatever::)"
+# setup = ["script1"]
+
+# [test-groups]
+# group1 = { max-threads = 1 }
+
+# [[profile.default.overrides]]
+# filter = 'test(filter::somethinfg::)'
+# test-group = 'group1'

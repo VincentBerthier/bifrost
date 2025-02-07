@@ -1,0 +1,16 @@
+[language-server.rust-analyzer.config]
+cargo = { allFeatures = true, targetDir = true }
+check = { command = "clippy", args = ["--all-features", "--all-targets"] }
+except-features = ["format"]
+
+[[language]]
+name = "toml"
+file-types = ["toml"]
+language-servers = ["taplo"]
+formatter = { command = "dprint", args = ["fmt", "--stdin", "toml"] }
+auto-format = true
+
+[language-server.ltex-ls.config]
+ltex.language = "en-GB"
+ltex.disabledRules = { "en-GB" = [] }
+ltex.dictionary = { "en-GB" = ["Bifrost"] }
