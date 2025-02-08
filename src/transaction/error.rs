@@ -3,7 +3,7 @@
 // Creation date: Saturday 08 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Saturday 08 February 2025 @ 16:39:18
+// Last modified: Sunday 09 February 2025 @ 16:42:31
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -32,15 +32,13 @@ use crate::crypto::Pubkey;
 
 /// Errors of the transaction module.
 #[derive(Debug, Display, From)]
+#[display("while handling a transaction: {_variant}")]
 pub enum Error {
     /// The transaction is not signed at all.
+    #[display("the transaction has no signer")]
     NoSignersOnTransaction,
     /// The transaction has the wrong number of signatures
-    #[display(
-        "wrong number of signatures: expected '{}', but got '{}'",
-        expected,
-        actual
-    )]
+    #[display("wrong number of signatures: expected '{expected}', but got '{actual}'")]
     WrongNumberOfSignatures {
         /// Expected number of signatures.
         expected: usize,
@@ -48,13 +46,16 @@ pub enum Error {
         actual: usize,
     },
     /// At least one signature doesn't match a signer (or vice-versa)
+    #[display("mismatch between signers and signatures")]
     SignaturesMismatch,
     /// There was an attempt to sign from an account that's not a signer.
+    #[display("'{key}' is not a signing account on this transaction")]
     UnexpectedSigner {
         /// The public key of the account attempting to sign.
         key: Pubkey,
     },
     /// An error that occurred in the accounts module.
+    #[display("account error: {_0}")]
     #[from]
     Account(crate::account::Error),
 }

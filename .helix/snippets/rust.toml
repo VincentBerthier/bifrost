@@ -14,6 +14,7 @@ description = "the template of an error module"
 prefix = "modtest"
 scope = ["rust"]
 body = """#[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
 
     use test_log::test;

@@ -1,9 +1,9 @@
-// File: src/crypto/error.rs
+// File: src/io/error.rs
 // Project: Bifrost
-// Creation date: Friday 07 February 2025
+// Creation date: Sunday 09 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Sunday 09 February 2025 @ 16:52:14
+// Last modified: Sunday 09 February 2025 @ 16:52:33
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -26,30 +26,19 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use std::array::TryFromSliceError;
-
 use derive_more::derive::{Display, From};
-use ed25519_dalek::SignatureError;
 
-/// Errors of the cryptography module.
+/// Errors of the I/O module.
 #[derive(Debug, Display, From)]
-#[display("during a cryptographic operation: {_variant}")]
+#[display("during an I/O operation: {_variant}")]
 pub enum Error {
-    /// Impossible to generate an off curve public key with the given seeds.
-    NoOffcurveKeyForSeeds,
-    /// Could not obtain the lock on the random engine used to generate private keys.
-    RandomEnginePoisonedLock,
-    /// Tried to used too many seeds to derive a public key.
-    TooManySeeds,
-    /// Tried to cast a byte array of the wrong length.
+    /// The index file wasn't found.
+    #[display("the index file wasn’t found")]
+    IndexFileNotFound,
+    /// An operation on the file system couldn't be completed.
     #[from]
-    InvalidArrayLength(TryFromSliceError),
-    /// Could not decode a string as `base58`
-    #[from]
-    Bs58Decoding(bs58::decode::Error),
-    /// Failed to verify a signature
-    #[from]
-    Signature(SignatureError),
+    #[display("filesystem error '{_0}'")]
+    FileSystem(std::io::Error),
 }
 
 impl core::error::Error for Error {}

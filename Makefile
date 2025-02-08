@@ -69,8 +69,7 @@ mutants: $(SOURCES)
 
 .PHONY = coverage
 coverage: $(SOURCES) Cargo.toml
-	cargo llvm-cov clean --profraw-only
-	rm -rf target/llvm-cov-pretty
+	rm -rf target/llvm-cov-*
 	cargo llvm-cov --no-report --locked --all-features nextest
 	cargo llvm-cov --all-features --doc --no-report
 	cargo llvm-cov report --doctests --ignore-filename-regex='(main.rs$$)' --json --output-path ./target/coverage.json

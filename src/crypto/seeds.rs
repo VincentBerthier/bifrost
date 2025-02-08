@@ -3,7 +3,7 @@
 // Creation date: Friday 07 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Friday 07 February 2025 @ 18:01:46
+// Last modified: Sunday 09 February 2025 @ 16:15:10
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -87,8 +87,8 @@ impl Seeds {
     /// ```rust
     /// # use bifrost::crypto::{Seeds, Keypair, Pubkey, Error};
     /// let mut seeds = Seeds::new(&[b"seed 1", b"seed 2"])?;
-    /// let key1 = Keypair::generate()?.pubkey();
-    /// let key2 = Keypair::generate()?.pubkey();
+    /// let key1 = Keypair::generate().pubkey();
+    /// let key2 = Keypair::generate().pubkey();
     /// seeds.add(&[&key1, &key2]);
     ///
     /// # Ok::<(), Error>(())
@@ -141,7 +141,7 @@ impl Seeds {
     pub fn generate_offcurve(&self) -> Result<(Pubkey, u8)> {
         debug!("generation off-curve public key");
         for bump in 0..255 {
-            let pubkey = self.generate_offcurve_with_bump(bump)?;
+            let pubkey = self.generate_offcurve_with_bump(bump);
             if !pubkey.is_oncurve() {
                 trace!("resulting key '{pubkey}' is off-curve, returning");
                 return Ok((pubkey, bump));
@@ -152,17 +152,19 @@ impl Seeds {
         Err(Error::NoOffcurveKeyForSeeds)
     }
 
-    fn generate_offcurve_with_bump(&self, bump: u8) -> Result<Pubkey> {
+    fn generate_offcurve_with_bump(&self, bump: u8) -> Pubkey {
         trace!("trying with bump {bump}");
         let mut hasher = self.hasher.clone();
         hasher.update([bump]);
         hasher.update(GENERATED_KEY_SEED);
         let hash = hasher.finalize();
-        Ok(Pubkey::from_bytes(&hash.as_slice().try_into()?))
+        #[expect(clippy::unwrap_used, reason = "right len by definition")]
+        Pubkey::from_bytes(&hash.as_slice().try_into().unwrap())
     }
 }
 
 #[mutants::skip]
+#[cfg_attr(coverage_nightly, coverage(off))]
 impl Debug for Seeds {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Seeds {{ n: {}}}", self.n)
@@ -170,6 +172,7 @@ impl Debug for Seeds {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
 
     use std::assert_matches::assert_matches;
@@ -186,7 +189,7 @@ mod tests {
     fn generate_offcurve_pubkey() -> TestResult {
         // Given
         let str_seeds = [b"seed 1".as_slice(), b"seed 2".as_slice()];
-        let pubkey = Keypair::generate()?.pubkey();
+        let pubkey = Keypair::generate().pubkey();
 
         // When
         let mut seeds = Seeds::new(&str_seeds)?;

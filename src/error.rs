@@ -3,7 +3,7 @@
 // Creation date: Saturday 08 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Saturday 08 February 2025 @ 16:25:54
+// Last modified: Sunday 09 February 2025 @ 16:49:32
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -30,6 +30,7 @@ use derive_more::derive::{Display, From};
 
 /// Errors of the Bifrost library.
 #[derive(Debug, Display, From)]
+#[display("Bifrost encountered an error {_variant}")]
 pub enum Error {
     /// An error caused by the cryptography module.
     #[from]
@@ -37,9 +38,15 @@ pub enum Error {
     /// An error caused by the accounts module.
     #[from]
     Account(crate::account::Error),
+    /// An error occurred during an I/O operation.
+    #[from]
+    Io(crate::io::Error),
     /// An error occurring in the transactions module.
     #[from]
     Transaction(crate::transaction::Error),
+    /// Error while configuring the tracing.
+    #[display("while configuring the tracing: {_0}")]
+    TracingConfiguration(tracing_subscriber::filter::FromEnvError),
 }
 
 impl core::error::Error for Error {}

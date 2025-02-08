@@ -3,7 +3,7 @@
 // Creation date: Saturday 08 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Saturday 08 February 2025 @ 21:56:31
+// Last modified: Sunday 09 February 2025 @ 16:15:10
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -76,7 +76,7 @@ impl Transaction {
     ///     transaction::{Instruction, Transaction}
     /// };
     /// # const PROGRAM: Pubkey = Pubkey::from_bytes(&[2; 32]);
-    /// let keypair = Keypair::generate()?;
+    /// let keypair = Keypair::generate();
     /// let mut trx = Transaction::new(0);
     /// let instruction = Instruction::new(PROGRAM, vec![InstructionAccountMeta::signing(keypair.pubkey(), Writable::Yes)?], &Vec::<u8>::new());
     /// trx.add(&[instruction])?;
@@ -108,7 +108,7 @@ impl Transaction {
     ///     transaction::{Instruction, Transaction}
     /// };
     /// # const PROGRAM: Pubkey = Pubkey::from_bytes(&[2; 32]);
-    /// let keypair = Keypair::generate()?;
+    /// let keypair = Keypair::generate();
     /// # let mut trx = Transaction::new(0);
     /// # let instruction = Instruction::new(PROGRAM, vec![InstructionAccountMeta::signing(keypair.pubkey(), Writable::Yes)?], &Vec::<u8>::new());
     /// # trx.add(&[instruction])?;
@@ -203,6 +203,7 @@ impl Transaction {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
 
     use std::assert_matches::assert_matches;
@@ -228,7 +229,7 @@ mod tests {
     #[test]
     fn create_transaction() -> TestResult {
         // Given
-        let keypair = Keypair::generate()?;
+        let keypair = Keypair::generate();
         let mut trx = Transaction::new(0);
         let instruction = get_instruction(vec![
             InstructionAccountMeta::signing(keypair.pubkey(), Writable::Yes)?,
@@ -248,7 +249,7 @@ mod tests {
     #[test]
     fn adding_instruction_to_signed_trx() -> TestResult {
         // Given
-        let keypair = Keypair::generate()?;
+        let keypair = Keypair::generate();
         let mut trx = Transaction::new(0);
         let instruction = get_instruction(vec![InstructionAccountMeta::signing(
             keypair.pubkey(),
@@ -269,7 +270,7 @@ mod tests {
     #[test]
     fn reject_unexpected_signer() -> TestResult {
         // Given
-        let keypair = Keypair::generate()?;
+        let keypair = Keypair::generate();
         let mut trx = Transaction::new(0);
         let instruction = get_instruction(vec![InstructionAccountMeta::signing(
             keypair.pubkey(),
@@ -277,7 +278,7 @@ mod tests {
         )?]);
         trx.add(&[instruction])?;
 
-        let signer = Keypair::generate()?;
+        let signer = Keypair::generate();
 
         // When
         let res = trx.sign(&signer);
@@ -291,7 +292,7 @@ mod tests {
     #[test]
     fn reject_invalid_signature() -> TestResult {
         // Given
-        let keypair = Keypair::generate()?;
+        let keypair = Keypair::generate();
         let mut trx = Transaction::new(0);
         let instruction = get_instruction(vec![InstructionAccountMeta::signing(
             keypair.pubkey(),
@@ -313,7 +314,7 @@ mod tests {
     #[test]
     fn no_duplicate_account() -> TestResult {
         // Given
-        let keypair = Keypair::generate()?;
+        let keypair = Keypair::generate();
         let mut trx = Transaction::new(0);
         let instruction1 = get_instruction(vec![InstructionAccountMeta::signing(
             keypair.pubkey(),
@@ -337,8 +338,8 @@ mod tests {
     #[test]
     fn merge_writable_accounts() -> TestResult {
         // Given
-        let keypair = Keypair::generate()?;
-        let key2 = Keypair::generate()?.pubkey();
+        let keypair = Keypair::generate();
+        let key2 = Keypair::generate().pubkey();
         let mut trx = Transaction::new(0);
         let instruction1 = get_instruction(vec![
             InstructionAccountMeta::signing(keypair.pubkey(), Writable::Yes)?,
@@ -365,8 +366,8 @@ mod tests {
     #[test]
     fn merge_signing_accounts() -> TestResult {
         // Given
-        let keypair = Keypair::generate()?;
-        let key2 = Keypair::generate()?.pubkey();
+        let keypair = Keypair::generate();
+        let key2 = Keypair::generate().pubkey();
         let mut trx = Transaction::new(0);
         let instruction1 = get_instruction(vec![
             InstructionAccountMeta::signing(keypair.pubkey(), Writable::Yes)?,
@@ -393,7 +394,7 @@ mod tests {
     #[test]
     fn same_trx_different_time_different_signature() -> TestResult {
         // Given
-        let keypair = Keypair::generate()?;
+        let keypair = Keypair::generate();
         let instruction = get_instruction(vec![
             InstructionAccountMeta::signing(keypair.pubkey(), Writable::Yes)?,
             InstructionAccountMeta::wallet(keypair.pubkey(), Writable::No)?,
@@ -417,8 +418,8 @@ mod tests {
     #[test]
     fn trx_signature_is_first_signers() -> TestResult {
         // Given
-        let payer = Keypair::generate()?;
-        let signer = Keypair::generate()?;
+        let payer = Keypair::generate();
+        let signer = Keypair::generate();
         let mut trx = Transaction::new(0);
         let instruction = get_instruction(vec![
             InstructionAccountMeta::signing(payer.pubkey(), Writable::Yes)?,

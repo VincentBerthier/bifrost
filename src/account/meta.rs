@@ -3,7 +3,7 @@
 // Creation date: Saturday 08 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Saturday 08 February 2025 @ 20:07:47
+// Last modified: Sunday 09 February 2025 @ 16:15:14
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -65,19 +65,14 @@ impl InstructionAccountMeta {
     /// # use bifrost::Error;
     /// # use bifrost::crypto::Keypair;
     /// # use bifrost::account::{Writable, InstructionAccountMeta};
-    /// let key = Keypair::generate()?.pubkey();
+    /// let key = Keypair::generate().pubkey();
     /// let meta = InstructionAccountMeta::signing(key, Writable::Yes)?;
     /// assert!(meta.is_signing());
     ///
     /// # Ok::<(), Error>(())
     /// ```
     pub fn signing(key: Pubkey, writable: Writable) -> Result<Self> {
-        if !key.is_oncurve() {
-            return Err(super::Error::MetaAccountCreation {
-                key,
-                kind: ErrorType::WalletNotOnCurve,
-            });
-        }
+        Self::check_on_curve(&key)?;
         Ok(Self {
             key,
             kind: AccountType::Signing,
@@ -102,25 +97,29 @@ impl InstructionAccountMeta {
     /// # use bifrost::Error;
     /// # use bifrost::crypto::Keypair;
     /// # use bifrost::account::{Writable, InstructionAccountMeta};
-    /// let key = Keypair::generate()?.pubkey();
+    /// let key = Keypair::generate().pubkey();
     /// let meta = InstructionAccountMeta::wallet(key, Writable::Yes)?;
     /// assert!(!meta.is_signing());
     ///
     /// # Ok::<(), Error>(())
     /// ```
     pub fn wallet(key: Pubkey, writable: Writable) -> Result<Self> {
-        if !key.is_oncurve() {
-            return Err(super::Error::MetaAccountCreation {
-                key,
-                kind: ErrorType::WalletNotOnCurve,
-            });
-        }
-
+        Self::check_on_curve(&key)?;
         Ok(Self {
             key,
             kind: AccountType::Wallet,
             writable,
         })
+    }
+
+    fn check_on_curve(key: &Pubkey) -> Result<()> {
+        if !key.is_oncurve() {
+            return Err(super::Error::MetaAccountCreation {
+                key: *key,
+                kind: ErrorType::WalletNotOnCurve,
+            });
+        }
+        Ok(())
     }
 
     /// Create metadata for a program.
@@ -177,7 +176,7 @@ impl InstructionAccountMeta {
     /// # Example
     /// ```rust
     /// # use bifrost::{Error, crypto::Keypair, account::{InstructionAccountMeta, Writable}};
-    /// let key = Keypair::generate()?.pubkey();
+    /// let key = Keypair::generate().pubkey();
     /// let mut meta1 = InstructionAccountMeta::wallet(key, Writable::No)?;
     /// let meta2 = InstructionAccountMeta::wallet(key, Writable::Yes)?;
     /// meta1.merge(&meta2);
@@ -220,6 +219,7 @@ impl InstructionAccountMeta {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
 
     use std::assert_matches::assert_matches;
@@ -237,7 +237,7 @@ mod tests {
         // Given
         let seeds = Seeds::new(&[&b"key1"])?;
         let offcurve = seeds.generate_offcurve()?.0;
-        let oncurve = Keypair::generate()?.pubkey();
+        let oncurve = Keypair::generate().pubkey();
 
         // When
         let _res = InstructionAccountMeta::program(offcurve)?;
@@ -256,7 +256,7 @@ mod tests {
         // Given
         let seeds = Seeds::new(&[&b"key1"])?;
         let offcurve = seeds.generate_offcurve()?.0;
-        let oncurve = Keypair::generate()?.pubkey();
+        let oncurve = Keypair::generate().pubkey();
 
         // When
         let res1 = InstructionAccountMeta::wallet(oncurve, Writable::No)?;
@@ -276,7 +276,7 @@ mod tests {
         // Given
         let seeds = Seeds::new(&[&b"key1"])?;
         let offcurve = seeds.generate_offcurve()?.0;
-        let oncurve = Keypair::generate()?.pubkey();
+        let oncurve = Keypair::generate().pubkey();
         let mut program = InstructionAccountMeta::program(offcurve)?;
         let wallet = InstructionAccountMeta::wallet(oncurve, Writable::No)?;
 

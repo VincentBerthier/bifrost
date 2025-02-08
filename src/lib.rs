@@ -3,7 +3,7 @@
 // Creation date: Friday 07 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Saturday 08 February 2025 @ 22:47:17
+// Last modified: Sunday 09 February 2025 @ 16:50:29
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -41,6 +41,8 @@ mod error;
 pub mod account;
 /// Definition of all cryptography related operations
 pub mod crypto;
+/// I/O operations
+pub mod io;
 /// Definition of transaction and base instructions.
 pub mod transaction;
 /// The validator producing blocks from instructions.

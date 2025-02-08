@@ -3,7 +3,7 @@
 // Creation date: Friday 07 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Saturday 08 February 2025 @ 01:05:18
+// Last modified: Sunday 09 February 2025 @ 16:15:34
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -36,7 +36,7 @@ use rand::SeedableRng as _;
 use rand_chacha::ChaCha20Rng;
 use tracing::{debug, info, instrument};
 
-use super::{pubkey::Pubkey, Error, Result, Signature};
+use super::{pubkey::Pubkey, Signature};
 
 static RNG: OnceLock<Mutex<ChaCha20Rng>> = OnceLock::new();
 
@@ -58,22 +58,20 @@ impl Keypair {
     /// # Example
     /// ```rust
     /// # use bifrost::crypto::{Keypair, Error};
-    /// let key = Keypair::generate()?;
+    /// let key = Keypair::generate();
     /// # Ok::<(), Error>(())
     /// ```
     #[instrument]
-    pub fn generate() -> Result<Self> {
+    pub fn generate() -> Self {
         debug!("generating new keypair");
         let key = {
-            let mut rng = RNG
-                .get_or_init(init_rand_engine)
-                .lock()
-                .map_err(|_err| Error::RandomEnginePoisonedLock)?;
+            #[expect(clippy::unwrap_used, reason = "the generation cannot panic")]
+            let mut rng = RNG.get_or_init(init_rand_engine).lock().unwrap();
             SigningKey::generate(&mut *rng)
         };
-        Ok(Self {
+        Self {
             key: key.to_keypair_bytes(),
-        })
+        }
     }
 
     /// Get the public key associated with the private key.
@@ -84,7 +82,7 @@ impl Keypair {
     /// # Example
     /// ```rust
     /// # use bifrost::crypto::{Keypair, Error};
-    /// let private_key = Keypair::generate()?;
+    /// let private_key = Keypair::generate();
     /// let public_key = private_key.pubkey();
     ///
     /// # Ok::<(), Error>(())
@@ -109,7 +107,7 @@ impl Keypair {
     /// # Example
     /// ```rust
     /// # use bifrost::crypto::{Keypair, Error};
-    /// let key = Keypair::generate()?;
+    /// let key = Keypair::generate();
     /// let message = b"some message";
     /// let signature = key.sign(message);
     ///
@@ -152,6 +150,7 @@ fn init_rand_engine() -> Mutex<ChaCha20Rng> {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use test_log::test;
 
@@ -160,16 +159,9 @@ mod tests {
     type TestResult = core::result::Result<(), Error>;
 
     #[test]
-    fn generate_keypair() -> TestResult {
-        let _ = Keypair::generate()?;
-
-        Ok(())
-    }
-
-    #[test]
     fn get_pubkey() -> TestResult {
         // When
-        let keypair = Keypair::generate()?;
+        let keypair = Keypair::generate();
         let pubkey = keypair.pubkey();
 
         // Then

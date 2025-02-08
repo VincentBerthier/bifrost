@@ -3,7 +3,7 @@
 // Creation date: Friday 07 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Saturday 08 February 2025 @ 01:41:42
+// Last modified: Sunday 09 February 2025 @ 16:15:10
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -39,7 +39,7 @@ use tracing::{debug, instrument};
 use super::error::Error;
 
 /// A public key
-#[derive(Clone, Copy, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
+#[derive(Clone, Copy, PartialEq, Eq, BorshSerialize, BorshDeserialize, Hash, PartialOrd, Ord)]
 pub struct Pubkey {
     /// Byte representation of the public key.
     key: [u8; PUBLIC_KEY_LENGTH],
@@ -73,7 +73,7 @@ impl Pubkey {
     /// # Example
     /// ```rust
     /// # use bifrost::crypto::{Keypair, Error};
-    /// let key = Keypair::generate()?.pubkey();
+    /// let key = Keypair::generate().pubkey();
     /// assert!(key.is_oncurve());
     ///
     /// # Ok::<(), Error>(())
@@ -103,9 +103,14 @@ impl From<&Pubkey> for VerifyingKey {
 impl FromStr for Pubkey {
     type Err = Error;
 
+    #[expect(
+        clippy::unwrap_used,
+        clippy::unwrap_in_result,
+        reason = "right len by definition"
+    )]
     fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
         let decoded = bs58::decode(s).into_vec()?;
-        let bytes: [u8; PUBLIC_KEY_LENGTH] = decoded.as_slice().try_into()?;
+        let bytes: [u8; PUBLIC_KEY_LENGTH] = decoded.as_slice().try_into().unwrap();
         Ok(Self { key: bytes })
     }
 }
@@ -130,5 +135,46 @@ impl Display for Pubkey {
 impl AsRef<[u8]> for Pubkey {
     fn as_ref(&self) -> &[u8] {
         &self.key
+    }
+}
+
+#[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
+mod tests {
+
+    use std::assert_matches::assert_matches;
+
+    use test_log::test;
+
+    use super::*;
+    type Error = Box<dyn core::error::Error>;
+    type TestResult = core::result::Result<(), Error>;
+
+    #[test]
+    fn check_oncurve() -> TestResult {
+        // Given
+        const KEY: &str = "H1LS9EF2cPrmmM828buVJSvvbztLc9buJPHMpqTmgEpa";
+
+        // When
+        let pubkey: Pubkey = KEY.parse()?;
+
+        // Then
+        assert_matches!(CompressedEdwardsY::from_slice(&pubkey.key), Ok(key) if key.decompress().is_some());
+
+        Ok(())
+    }
+
+    #[test]
+    fn check_offcurve() -> TestResult {
+        // Given
+        const KEY: &str = "HvkkZN4pSTTo9wkCKhpTQ5pQ79fzjEVu2WJwu1mYH3Wk";
+
+        // When
+        let pubkey: Pubkey = KEY.parse()?;
+
+        // Then
+        assert_matches!(CompressedEdwardsY::from_slice(&pubkey.key), Ok(key) if key.decompress().is_none());
+
+        Ok(())
     }
 }

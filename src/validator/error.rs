@@ -3,7 +3,7 @@
 // Creation date: Saturday 08 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Saturday 08 February 2025 @ 22:30:28
+// Last modified: Sunday 09 February 2025 @ 16:53:52
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -30,11 +30,11 @@ use derive_more::derive::{Display, From};
 
 /// Errors of the validator module.
 #[derive(Debug, Display, From)]
+#[display("within the validator: {_variant}")]
 pub enum Error {
     /// The transaction's signatures are missing or do not match the expectation.
+    #[display("the transaction’s signatures are invalid")]
     InvalidTransactionSignatures,
-    /// Tried to process a transaction, but none were found
-    NoTransactionFound,
 }
 
 impl core::error::Error for Error {}

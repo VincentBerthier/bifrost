@@ -12,9 +12,9 @@ rust-version = "1.85"
 borsh = { version = "1.5.5", features = ["derive"] }
 bs58 = "0.5.1"
 chrono = { version = "0.4.39", features = ["serde"] }
-clap = { version = "4.5.27", features = ["derive"] }
+clap = { version = "4.5.28", features = ["derive"] }
 curve25519-dalek = "4.1.3"
-derive_more = { version = "1.0.0", features = ["from", "display"] }
+derive_more = { version = "2.0.1", features = ["from", "display"] }
 ed25519-dalek = { version = "2.1.1", features = ["rand_core"] }
 memmap2 = "0.9.5"
 mutants = "0.0.3"
@@ -31,6 +31,10 @@ cucumber = "0.21.1"
 test-log = { version = "0.2.17", features = ["trace"] }
 
 [build-dependencies]
+
+[patch.crates-io]
+borsh = { git = "https://github.com/VincentBerthier/borsh-rs", branch = "auto_derive_attr" }
+
 # [[test]]
 # name = "core"   # name of the test targets
 # harness = false # allow Cucumber to print output instead of libtest

@@ -3,7 +3,7 @@
 // Creation date: Saturday 08 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Saturday 08 February 2025 @ 20:20:17
+// Last modified: Sunday 09 February 2025 @ 16:15:10
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -128,6 +128,7 @@ impl Message {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
 
     use test_log::test;
@@ -144,7 +145,7 @@ mod tests {
         let empty_message = Message::new(0);
         let mut with_accounts = Message::new(0);
         with_accounts.accounts.push(InstructionAccountMeta::signing(
-            Keypair::generate()?.pubkey(),
+            Keypair::generate().pubkey(),
             Writable::Yes,
         )?);
         let mut with_instruction = Message::new(0);

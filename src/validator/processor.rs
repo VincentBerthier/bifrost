@@ -3,7 +3,7 @@
 // Creation date: Saturday 08 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Sunday 09 February 2025 @ 00:12:13
+// Last modified: Sunday 09 February 2025 @ 16:15:10
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -77,6 +77,7 @@ async fn processor() -> ! {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     #![expect(clippy::unwrap_used)]
 
@@ -98,7 +99,7 @@ mod tests {
     pub const PROGRAM: Pubkey = Pubkey::from_bytes(&[2; PUBLIC_KEY_LENGTH]);
 
     fn create_unsigned_transaction() -> Result<Transaction> {
-        let keypair = Keypair::generate()?;
+        let keypair = Keypair::generate();
         let mut trx = Transaction::new(0);
         let instruction = Instruction::new(
             PROGRAM,
@@ -115,7 +116,7 @@ mod tests {
     }
 
     fn create_signed_transaction() -> Result<Transaction> {
-        let keypair = Keypair::generate()?;
+        let keypair = Keypair::generate();
         let mut trx = Transaction::new(0);
         let instruction = Instruction::new(
             PROGRAM,

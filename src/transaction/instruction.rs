@@ -3,7 +3,7 @@
 // Creation date: Saturday 08 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Saturday 08 February 2025 @ 20:00:03
+// Last modified: Sunday 09 February 2025 @ 16:15:10
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -66,7 +66,7 @@ impl Instruction {
     ///     transaction::Instruction
     /// };
     /// # const PROGRAM: Pubkey = Pubkey::from_bytes(&[2; 32]);
-    /// let keypair = Keypair::generate()?;
+    /// let keypair = Keypair::generate();
     /// let instr = Instruction::new(
     ///     PROGRAM,
     ///     vec![InstructionAccountMeta::signing(keypair.pubkey(), Writable::Yes)?],

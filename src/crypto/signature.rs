@@ -3,7 +3,7 @@
 // Creation date: Friday 07 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Friday 07 February 2025 @ 21:06:11
+// Last modified: Sunday 09 February 2025 @ 16:15:10
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -53,7 +53,7 @@ impl Signature {
     /// # Example
     /// ```rust
     /// # use bifrost::crypto::{Keypair, Error};
-    /// let key = Keypair::generate()?;
+    /// let key = Keypair::generate();
     /// let message = b"some message";
     /// let signature = key.sign(message);
     /// assert!(signature.verify(&key.pubkey(), message).is_ok());
@@ -90,6 +90,7 @@ impl fmt::Debug for Signature {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
 
     use std::assert_matches::assert_matches;
@@ -105,9 +106,9 @@ mod tests {
     fn check_signature() -> TestResult {
         // Given
         let message = b"some super important data for sure";
-        let key1 = Keypair::generate()?;
+        let key1 = Keypair::generate();
         let pubkey1 = key1.pubkey();
-        let key2 = Keypair::generate()?;
+        let key2 = Keypair::generate();
         let pubkey2 = key2.pubkey();
 
         // When

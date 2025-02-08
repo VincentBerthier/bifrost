@@ -3,7 +3,7 @@
 // Creation date: Friday 07 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Friday 07 February 2025 @ 15:33:43
+// Last modified: Sunday 09 February 2025 @ 16:51:46
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -29,7 +29,7 @@
 use tracing::{info, level_filters::LevelFilter};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
-type Error = Box<dyn core::error::Error>;
+use bifrost::Error;
 type Result<T> = core::result::Result<T, Error>;
 
 #[tokio::main]
@@ -43,7 +43,8 @@ async fn main() -> Result<()> {
 fn setup_tracing() -> Result<()> {
     let filter = EnvFilter::builder()
         .with_default_directive(LevelFilter::INFO.into())
-        .from_env()?;
+        .from_env()
+        .map_err(Error::TracingConfiguration)?;
 
     // register layers
     tracing_subscriber::registry()

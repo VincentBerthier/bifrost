@@ -1,9 +1,9 @@
-// File: src/crypto/error.rs
+// File: src/io/vault.rs
 // Project: Bifrost
-// Creation date: Friday 07 February 2025
+// Creation date: Sunday 09 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Sunday 09 February 2025 @ 16:52:14
+// Last modified: Sunday 09 February 2025 @ 01:30:51
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -26,30 +26,37 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use std::array::TryFromSliceError;
+use std::{
+    path::{Path, PathBuf},
+    sync::OnceLock,
+};
 
-use derive_more::derive::{Display, From};
-use ed25519_dalek::SignatureError;
+use tracing::{debug, instrument};
 
-/// Errors of the cryptography module.
-#[derive(Debug, Display, From)]
-#[display("during a cryptographic operation: {_variant}")]
-pub enum Error {
-    /// Impossible to generate an off curve public key with the given seeds.
-    NoOffcurveKeyForSeeds,
-    /// Could not obtain the lock on the random engine used to generate private keys.
-    RandomEnginePoisonedLock,
-    /// Tried to used too many seeds to derive a public key.
-    TooManySeeds,
-    /// Tried to cast a byte array of the wrong length.
-    #[from]
-    InvalidArrayLength(TryFromSliceError),
-    /// Could not decode a string as `base58`
-    #[from]
-    Bs58Decoding(bs58::decode::Error),
-    /// Failed to verify a signature
-    #[from]
-    Signature(SignatureError),
+use super::{support::create_folder, Result};
+
+pub static VAULT_PATH: OnceLock<PathBuf> = OnceLock::new();
+
+#[mutants::skip]
+#[expect(clippy::unwrap_used)]
+pub fn set_vault_path(path: &str) {
+    VAULT_PATH.set(Path::new(path).to_path_buf()).unwrap();
 }
 
-impl core::error::Error for Error {}
+#[expect(clippy::expect_used)]
+pub fn get_vault_path() -> &'static PathBuf {
+    VAULT_PATH.get().expect("vault path is not set")
+}
+
+#[mutants::skip]
+#[instrument]
+pub fn init_vault() -> Result<()> {
+    debug!("initializing vault");
+    let path = get_vault_path();
+    ["accounts", "transactions", "blocks"]
+        .iter()
+        .map(|&folder| path.join(folder))
+        .try_for_each(create_folder)?;
+
+    Ok(())
+}

@@ -3,7 +3,7 @@
 // Creation date: Saturday 08 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Saturday 08 February 2025 @ 16:09:45
+// Last modified: Sunday 09 February 2025 @ 16:52:47
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -34,6 +34,7 @@ use super::types::AccountType;
 
 /// Errors of the account module.
 #[derive(Debug, Display, From)]
+#[display("during an account operation: {_variant}")]
 pub enum Error {
     /// Invalid key used to create account metadata
     #[display("invalid key use: {} (error: {:?})", key, kind)]
