@@ -3,7 +3,7 @@
 // Creation date: Friday 07 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Saturday 08 February 2025 @ 16:21:01
+// Last modified: Saturday 08 February 2025 @ 22:47:17
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -28,6 +28,7 @@
 
 //! The main library crate for the Bifrost blockchain.
 
+#![feature(never_type)]
 #![feature(assert_matches)]
 #![feature(coverage_attribute)]
 #![cfg_attr(not(feature = "test"), allow(dead_code, clippy::allow_attributes))]
@@ -42,5 +43,7 @@ pub mod account;
 pub mod crypto;
 /// Definition of transaction and base instructions.
 pub mod transaction;
+/// The validator producing blocks from instructions.
+pub mod validator;
 
 pub use error::Error;

@@ -3,7 +3,7 @@
 // Creation date: Saturday 08 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Saturday 08 February 2025 @ 20:21:39
+// Last modified: Saturday 08 February 2025 @ 21:56:31
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -44,14 +44,45 @@ pub struct Transaction {
 }
 
 impl Transaction {
-    const fn new(slot: u64) -> Self {
+    /// Create a new transaction.
+    ///
+    /// # Parameters
+    /// * `slot` - the slot at which (or after which) the transaction was created,
+    #[must_use]
+    pub const fn new(slot: u64) -> Self {
         Self {
             signatures: Vec::new(),
             message: Message::new(slot),
         }
     }
 
-    fn add(&mut self, instructions: &[Instruction]) -> Result<()> {
+    /// Add instructions to the transaction.
+    ///
+    /// Note that it will clear any signatures if any.
+    ///
+    /// # Parameters
+    /// * `instructions` - list of instructions to add to the transaction,
+    ///
+    /// # Errors
+    /// Errors only happen if the same public key points to two different types
+    /// of accounts (such as one is a wallet, the other a program).
+    ///
+    /// # Example
+    /// ```rust
+    /// # use bifrost::{
+    ///     Error,
+    ///     crypto::{Pubkey, Keypair},
+    ///     account::{InstructionAccountMeta, Writable},
+    ///     transaction::{Instruction, Transaction}
+    /// };
+    /// # const PROGRAM: Pubkey = Pubkey::from_bytes(&[2; 32]);
+    /// let keypair = Keypair::generate()?;
+    /// let mut trx = Transaction::new(0);
+    /// let instruction = Instruction::new(PROGRAM, vec![InstructionAccountMeta::signing(keypair.pubkey(), Writable::Yes)?], &Vec::<u8>::new());
+    /// trx.add(&[instruction])?;
+    /// # Ok::<(), Error>(())
+    /// ```
+    pub fn add(&mut self, instructions: &[Instruction]) -> Result<()> {
         for instr in instructions {
             self.message.add_instruction(instr)?;
         }
@@ -60,13 +91,37 @@ impl Transaction {
         Ok(())
     }
 
+    /// Sign a transaction.
+    ///
+    /// The payer's signature will always be used as the one
+    /// used to designate the transaction in the future.
+    ///
+    /// # Parameters
+    /// * `key` - the `keypair` of the signer,
+    ///
+    /// # Example
+    /// ```rust
+    /// # use bifrost::{
+    ///     Error,
+    ///     crypto::{Pubkey, Keypair},
+    ///     account::{InstructionAccountMeta, Writable},
+    ///     transaction::{Instruction, Transaction}
+    /// };
+    /// # const PROGRAM: Pubkey = Pubkey::from_bytes(&[2; 32]);
+    /// let keypair = Keypair::generate()?;
+    /// # let mut trx = Transaction::new(0);
+    /// # let instruction = Instruction::new(PROGRAM, vec![InstructionAccountMeta::signing(keypair.pubkey(), Writable::Yes)?], &Vec::<u8>::new());
+    /// # trx.add(&[instruction])?;
+    /// trx.sign(&keypair)?;
+    /// # Ok::<(), Error>(())
+    /// ```
     #[expect(
         clippy::unwrap_used,
         clippy::unwrap_in_result,
         reason = "if we can sign, there’s a payer"
     )]
     #[instrument(skip_all, fields(?key))]
-    fn sign(&mut self, key: &Keypair) -> Result<()> {
+    pub fn sign(&mut self, key: &Keypair) -> Result<()> {
         let signature = self.get_signature(key)?;
 
         if key.pubkey() == self.message.get_payer().unwrap() {
@@ -85,7 +140,9 @@ impl Transaction {
         Ok(key.sign(self.message.to_vec()))
     }
 
-    fn is_ready(&self) -> bool {
+    /// Checks that both the message and the signatures are valid.
+    #[must_use]
+    pub fn is_valid(&self) -> bool {
         self.message.is_valid() && self.check_signed().is_ok()
     }
 
@@ -183,7 +240,7 @@ mod tests {
         trx.sign(&keypair)?;
 
         // Then
-        assert!(trx.is_ready());
+        assert!(trx.is_valid());
 
         Ok(())
     }
@@ -204,7 +261,7 @@ mod tests {
         trx.add(&[instruction])?;
 
         // Then
-        assert!(!trx.is_ready());
+        assert!(!trx.is_valid());
 
         Ok(())
     }
@@ -249,7 +306,7 @@ mod tests {
         let corrupted: Transaction = borsh::from_slice(&data)?;
 
         // Then
-        assert!(!corrupted.is_ready());
+        assert!(!corrupted.is_valid());
         Ok(())
     }
 

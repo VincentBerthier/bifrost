@@ -34,4 +34,5 @@ mod transaction;
 pub use error::Error;
 type Result<T> = core::result::Result<T, Error>;
 
+pub use instruction::Instruction;
 pub use transaction::Transaction;

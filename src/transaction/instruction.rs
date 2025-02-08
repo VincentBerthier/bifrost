@@ -37,15 +37,44 @@ pub struct CompiledInstruction {
     accounts: Vec<u8>,
 }
 
+/// An instruction to execute on the blockchain.
 #[derive(Clone, Debug, BorshSerialize)]
 pub struct Instruction {
+    /// Public key of the program to run.
     program_id: Pubkey,
+    /// List of accounts expected by the instruction.
     accounts: Vec<InstructionAccountMeta>,
+    /// Binary encoded payload for the transaction.
     data: Vec<u8>,
 }
 
 #[expect(clippy::missing_const_for_fn, reason = "false positive")]
 impl Instruction {
+    /// Create a new instruction.
+    ///
+    /// # Parameters
+    /// * `program_id` - the public key of the program,
+    /// * `accounts` - list of accounts expected by the instruction,
+    /// * `payload` - the payload of the transaction.
+    ///
+    /// # Example
+    /// ```rust
+    /// # use bifrost::{
+    ///     Error,
+    ///     account::{InstructionAccountMeta, Writable},
+    ///     crypto::{Keypair, Pubkey},
+    ///     transaction::Instruction
+    /// };
+    /// # const PROGRAM: Pubkey = Pubkey::from_bytes(&[2; 32]);
+    /// let keypair = Keypair::generate()?;
+    /// let instr = Instruction::new(
+    ///     PROGRAM,
+    ///     vec![InstructionAccountMeta::signing(keypair.pubkey(), Writable::Yes)?],
+    ///     &Vec::<u8>::new()
+    /// );
+    /// // write me later
+    /// # Ok::<(), Error>(())
+    /// ```
     #[expect(clippy::unwrap_used)]
     pub fn new<A, D>(program_id: Pubkey, accounts: A, payload: &D) -> Self
     where
@@ -60,15 +89,21 @@ impl Instruction {
         }
     }
 
+    /// Get the instruction's payload
     #[mutants::skip]
+    #[must_use]
     pub fn data(&self) -> &[u8] {
         &self.data
     }
 
+    /// Get the executing program's public key.
+    #[must_use]
     pub fn program(&self) -> &Pubkey {
         &self.program_id
     }
 
+    /// Get the list of accounts expected by the instruction.
+    #[must_use]
     pub fn accounts(&self) -> &[InstructionAccountMeta] {
         &self.accounts
     }

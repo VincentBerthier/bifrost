@@ -1,9 +1,9 @@
-// File: src/error.rs
+// File: src/validator/mod.rs
 // Project: Bifrost
 // Creation date: Saturday 08 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Saturday 08 February 2025 @ 16:25:54
+// Last modified: Saturday 08 February 2025 @ 21:53:27
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -26,20 +26,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use derive_more::derive::{Display, From};
+mod error;
+mod processor;
 
-/// Errors of the Bifrost library.
-#[derive(Debug, Display, From)]
-pub enum Error {
-    /// An error caused by the cryptography module.
-    #[from]
-    Crypto(crate::crypto::Error),
-    /// An error caused by the accounts module.
-    #[from]
-    Account(crate::account::Error),
-    /// An error occurring in the transactions module.
-    #[from]
-    Transaction(crate::transaction::Error),
-}
-
-impl core::error::Error for Error {}
+pub use error::Error;
+type Result<T> = core::result::Result<T, Error>;

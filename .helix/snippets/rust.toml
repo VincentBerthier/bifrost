@@ -73,15 +73,12 @@ body = """
 /// ${1:Description.}$0
 ///
 /// # Parameters
-/// * `${3:`argument_name`}` - ${4:type and description},
-///
-/// # Returns
-/// ${2:type and description of the returned object}
+/// * `${2:`argument_name`}` - ${3:type and description},
 ///
 /// # Example
 /// ```rust
 /// # use bifrost::Error;
-/// // ${5:write me later}
+/// // ${4:write me later}
 /// # Ok::<(), Error>(())
 /// ```"""
 description = "A rust comment with description, parameters, returns and examples."

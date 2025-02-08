@@ -1,9 +1,9 @@
-// File: src/error.rs
+// File: src/validator/error.rs
 // Project: Bifrost
 // Creation date: Saturday 08 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Saturday 08 February 2025 @ 16:25:54
+// Last modified: Saturday 08 February 2025 @ 22:30:28
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -28,18 +28,13 @@
 
 use derive_more::derive::{Display, From};
 
-/// Errors of the Bifrost library.
+/// Errors of the validator module.
 #[derive(Debug, Display, From)]
 pub enum Error {
-    /// An error caused by the cryptography module.
-    #[from]
-    Crypto(crate::crypto::Error),
-    /// An error caused by the accounts module.
-    #[from]
-    Account(crate::account::Error),
-    /// An error occurring in the transactions module.
-    #[from]
-    Transaction(crate::transaction::Error),
+    /// The transaction's signatures are missing or do not match the expectation.
+    InvalidTransactionSignatures,
+    /// Tried to process a transaction, but none were found
+    NoTransactionFound,
 }
 
 impl core::error::Error for Error {}
