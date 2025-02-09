@@ -11,8 +11,6 @@ rust-version = "1.85"
 [dependencies]
 borsh = { version = "1.5.5", features = ["derive"] }
 bs58 = "0.5.1"
-chrono = { version = "0.4.39", features = ["serde"] }
-clap = { version = "4.5.28", features = ["derive"] }
 curve25519-dalek = "4.1.3"
 derive_more = { version = "2.0.1", features = ["from", "display"] }
 ed25519-dalek = { version = "2.1.1", features = ["rand_core"] }
@@ -27,7 +25,6 @@ tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
-cucumber = "0.21.1"
 test-log = { version = "0.2.17", features = ["trace"] }
 
 [build-dependencies]
@@ -68,6 +65,7 @@ empty_docs = { level = "allow", priority = 1 }
 wildcard_imports = { level = "allow", priority = 1 }
 missing_panics_doc = { level = "allow", priority = 1 }
 module_inception = { level = "allow", priority = 1 }
+significant_drop_in_scrutinee = { level = "allow", priority = 1 } # annoying false positives on github
 
 # Restriction lints
 # absolute_paths = { level = "warn", priority = 1 }

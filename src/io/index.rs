@@ -31,16 +31,11 @@ use std::{collections::HashMap, path::PathBuf};
 use borsh::{BorshDeserialize, BorshSerialize};
 use tracing::{debug, instrument, trace, warn};
 
-use crate::{crypto::Pubkey, io::support::write_to_file};
+use crate::{account::Wallet, crypto::Pubkey, io::support::write_to_file};
 
-use super::{support::read_from_file, vault::get_vault_path, Error, Result};
-
-#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
-pub struct AccountDiskLocation {
-    slot: u64,
-    offset: usize,
-    size: usize,
-}
+use super::{
+    location::AccountDiskLocation, support::read_from_file, vault::get_vault_path, Error, Result,
+};
 
 #[derive(BorshSerialize, BorshDeserialize)]
 pub struct Index {
@@ -49,9 +44,9 @@ pub struct Index {
 
 impl Index {
     #[instrument]
-    fn load_or_create() -> Self {
+    pub async fn load_or_create() -> Self {
         debug!("initializing index");
-        if let Ok(index) = Self::load_from_disk() {
+        if let Ok(index) = Self::load_from_disk().await {
             trace!("index could be reloaded from the disk");
             return index;
         }
@@ -63,30 +58,38 @@ impl Index {
     }
 
     #[instrument]
-    fn load_from_disk() -> Result<Self> {
+    async fn load_from_disk() -> Result<Self> {
         let index_path = Self::get_path();
         if !index_path.exists() {
             return Err(Error::IndexFileNotFound);
         }
-        let accounts = read_from_file(index_path)?;
+        let accounts = read_from_file(index_path).await?;
 
         Ok(Self { accounts })
     }
 
-    fn find(&self, key: &Pubkey) -> Option<&AccountDiskLocation> {
+    pub async fn load(&self, key: &Pubkey) -> Result<Option<Wallet>> {
+        let Some(loc) = self.find(key) else {
+            return Ok(None);
+        };
+
+        Some(loc.read().await).transpose()
+    }
+
+    pub fn find(&self, key: &Pubkey) -> Option<&AccountDiskLocation> {
         self.accounts.get(key)
     }
 
     #[instrument(skip_all, fields(%key))]
-    fn add_account(&mut self, key: Pubkey, loc: AccountDiskLocation) {
+    pub fn add_account(&mut self, key: Pubkey, loc: AccountDiskLocation) {
         debug!("adding account to the index");
         self.accounts.insert(key, loc);
     }
 
     #[instrument(skip_all)]
-    fn save(&self) -> Result<()> {
+    pub async fn save(&self) -> Result<()> {
         debug!("saving index to file");
-        write_to_file(Self::get_path(), self)
+        write_to_file(Self::get_path(), self).await
     }
 
     fn get_path() -> PathBuf {
@@ -104,29 +107,26 @@ mod tests {
     use test_log::test;
 
     use crate::{
+        account::Wallet,
         crypto::Keypair,
-        io::vault::{init_vault, set_vault_path},
+        io::{
+            support::append_to_file,
+            vault::{set_vault_path, Vault},
+        },
     };
 
     // use super::super::Error;
     use super::*;
     type TestResult = core::result::Result<(), Box<dyn core::error::Error>>;
 
-    fn generate_dummy_index(vault_path: &str) -> TestResult {
+    async fn generate_dummy_index(vault_path: &str) -> TestResult {
         set_vault_path(vault_path);
-        init_vault()?;
+        Vault::init_vault().await?;
         let index_path = get_vault_path().join("index");
 
         let key = Keypair::generate().pubkey();
         let mut accounts = HashMap::new();
-        accounts.insert(
-            key,
-            AccountDiskLocation {
-                slot: 0,
-                offset: 0,
-                size: 0,
-            },
-        );
+        accounts.insert(key, AccountDiskLocation::default());
         let dummy = Index { accounts };
         let mut index_file = OpenOptions::new()
             .write(true)
@@ -138,14 +138,14 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn init_vault_folders() -> TestResult {
+    #[test(tokio::test)]
+    async fn init_vault_folders() -> TestResult {
         // Given
         const VAULT: &str = "/tmp/bifrost/index-1";
         set_vault_path(VAULT);
 
         // When
-        init_vault()?;
+        Vault::init_vault().await?;
 
         // Then
         assert!(Path::new(VAULT).join("accounts").exists());
@@ -154,30 +154,31 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn load_index_from_disk() -> TestResult {
+    #[test(tokio::test)]
+    async fn load_index_from_disk() -> TestResult {
         // Given
         const VAULT: &str = "/tmp/bifrost/index-2";
-        generate_dummy_index(VAULT)?;
+        generate_dummy_index(VAULT).await?;
 
         // When
-        let index = Index::load_from_disk()?;
+        let index = Index::load_from_disk().await?;
 
         // Then
         assert_eq!(index.accounts.len(), 1);
         Ok(())
     }
 
-    #[test]
-    fn add_and_find_account() -> TestResult {
+    #[test(tokio::test)]
+    async fn add_and_find_account() -> TestResult {
         // Given
         const SLOT: u64 = 198;
         const VAULT: &str = "/tmp/bifrost/index-2";
         set_vault_path(VAULT);
-        init_vault()?;
-        let mut index = Index::load_or_create();
+        Vault::init_vault().await?;
+        let mut index = Index::load_or_create().await;
         let loc = AccountDiskLocation {
             slot: SLOT,
+            id: 0,
             offset: 0,
             size: 0,
         };
@@ -191,16 +192,17 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn save_and_reload() -> TestResult {
+    #[test(tokio::test)]
+    async fn save_and_reload() -> TestResult {
         // Given
         const SLOT: u64 = 201;
         const VAULT: &str = "/tmp/bifrost/index-3";
         set_vault_path(VAULT);
-        init_vault()?;
-        let mut index = Index::load_or_create();
+        Vault::init_vault().await?;
+        let mut index = Index::load_or_create().await;
         let loc = AccountDiskLocation {
             slot: SLOT,
+            id: 0,
             offset: 0,
             size: 0,
         };
@@ -208,8 +210,8 @@ mod tests {
         index.add_account(key, loc);
 
         // When
-        index.save()?;
-        let reloaded = Index::load_from_disk()?;
+        index.save().await?;
+        let reloaded = Index::load_from_disk().await?;
 
         // Then
         assert_matches!(reloaded.find(&key), Some(l) if *l == loc);
@@ -217,20 +219,53 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn cannot_save_if_vault_not_init() {
+    #[test(tokio::test)]
+    async fn cannot_save_if_vault_not_init() {
         // Given
         const VAULT: &str = "/tmp/bifrost/index-4";
         set_vault_path(VAULT);
-        let mut index = Index::load_or_create();
+        let mut index = Index::load_or_create().await;
         let loc = AccountDiskLocation::default();
         let key = Keypair::generate().pubkey();
         index.add_account(key, loc);
 
         // When
-        let res = index.save();
+        let res = index.save().await;
 
         // Then
         assert_matches!(res, Err(Error::FileSystem(err)) if matches!(err.kind(), std::io::ErrorKind::NotFound));
+    }
+
+    #[test(tokio::test)]
+    async fn load_account() -> TestResult {
+        // Given
+        const VAULT: &str = "/tmp/bifrost/index-5";
+        const SLOT: u64 = 389;
+        const ID: u8 = 5;
+        set_vault_path(VAULT);
+        Vault::init_vault().await?;
+        let account = Wallet { prisms: 398_399 };
+        let path = get_vault_path()
+            .join("accounts")
+            .join(format!("{SLOT}.{ID}"));
+        append_to_file(&path, &account).await?;
+        append_to_file(&path, &account).await?;
+        append_to_file(&path, &account).await?;
+        let account_data = borsh::to_vec(&account)?;
+        let len = account_data.len() as u64;
+
+        let loc = AccountDiskLocation {
+            slot: SLOT,
+            id: ID,
+            offset: len * 2,
+            size: len,
+        };
+
+        // When
+        let from_file = loc.read().await?;
+
+        // Then
+        assert_eq!(from_file, account);
+        Ok(())
     }
 }

@@ -16,6 +16,12 @@
     };
 
     flake-utils.url = "github:numtide/flake-utils";
+    scls = {
+      url = "github:estin/simple-completion-language-server";
+      inputs = {
+        nixpkgs.follows = "nixpkgs";
+      };
+    };
 
     advisory-db = {
       url = "github:rustsec/advisory-db";
@@ -26,12 +32,12 @@
   outputs = {
     self,
     nixpkgs,
-    flake-utils,
-    rust-overlay,
-    crane,
-    advisory-db,
-  }:
-    flake-utils.lib.eachSystem ["x86_64-linux"] (system: let
+    ...
+  } @ inputs:
+    inputs.flake-utils.lib.eachSystem ["x86_64-linux"] (system: let
+      crane = inputs.crane;
+      advisory-db = inputs.advisory-db;
+      rust-overlay = inputs.rust-overlay;
       pkgs = import nixpkgs {
         inherit system;
         config.allowUnfree = true;
@@ -287,10 +293,11 @@
           cowsay
           gitmoji-cli # Use gitmojis to commit
           gnuplot
+          llvm-cov-pretty
           lolcat
+          inputs.scls.defaultPackage.${system}
           tokei # file lines count
           tokio-console
-          llvm-cov-pretty
 
           # Formatting
           dprint

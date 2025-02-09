@@ -35,10 +35,24 @@ pub enum Error {
     /// The index file wasn't found.
     #[display("the index file wasn’t found")]
     IndexFileNotFound,
+    /// Attempted to read beyond file size
+    #[display("attempted to read from {from} to {to} but file only has {size} bytes")]
+    OutOfBounds {
+        /// Starting byte offset
+        from: u64,
+        /// Last bytes tried to read.
+        to: u64,
+        /// Actual size of the file
+        size: u64,
+    },
     /// An operation on the file system couldn't be completed.
     #[from]
     #[display("filesystem error '{_0}'")]
     FileSystem(std::io::Error),
+    /// Failed to acquire a lock on a resource.
+    #[display("couldn’t acquire a resource lock: {_0}")]
+    #[from]
+    ResourceLock(tokio::sync::AcquireError),
 }
 
 impl core::error::Error for Error {}

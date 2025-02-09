@@ -28,7 +28,9 @@
 
 mod error;
 mod index;
+mod location;
 mod support;
+mod trash;
 mod vault;
 
 pub use error::Error;
