@@ -3,7 +3,7 @@
 // Creation date: Sunday 09 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Sunday 09 February 2025 @ 20:57:03
+// Last modified: Tuesday 11 February 2025 @ 11:50:48
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -28,12 +28,17 @@
 
 use std::{path::PathBuf, sync::OnceLock};
 
+use tokio::fs::remove_file;
 use tracing::{debug, instrument};
 
 use crate::{account::Wallet, crypto::Pubkey};
 
 use super::{
-    index::Index, location::AccountDiskLocation, support::create_folder, trash::Trash, Result,
+    index::Index,
+    location::AccountDiskLocation,
+    support::create_folder,
+    trash::{AccountFile, Trash},
+    Result,
 };
 
 pub static VAULT_PATH: OnceLock<PathBuf> = OnceLock::new();
@@ -62,7 +67,7 @@ impl Vault {
         Self::init_vault().await?;
         Ok(Self {
             index: Index::load_or_create().await,
-            trash: Trash::default(),
+            trash: Trash::load_or_create().await,
         })
     }
 
@@ -85,14 +90,46 @@ impl Vault {
         Ok((self.index.load(key).await?).unwrap_or_default())
     }
 
+    // TODO: will need to handle saving the same account multiple times for the same slot
+    // it could work as it is, it’s just inneficient
     pub async fn save_account(&mut self, key: Pubkey, account: &Wallet, slot: u64) -> Result<()> {
         if let Some(&old_loc) = self.index.find(&key) {
-            self.trash.insert(key, old_loc);
+            self.trash.insert(old_loc)?;
         }
 
         let loc = AccountDiskLocation::new_from_write(account, slot).await?;
-        self.index.add_account(key, loc);
+        self.index.set_account(key, loc);
 
+        Ok(())
+    }
+
+    pub async fn save(&self) -> Result<()> {
+        self.index.save().await?;
+        self.trash.save().await
+    }
+
+    pub async fn cleanup(&mut self, current_slot: u64) -> Result<()> {
+        let to_clean = self.trash.get_files_to_clean().await;
+        for file in to_clean {
+            let AccountFile { slot, id } = file;
+            if slot == current_slot {
+                continue;
+            }
+            self.relocate_accounts(slot, id).await?;
+            remove_file(AccountDiskLocation::get_path(slot, id)).await?;
+            self.trash.remove(&file);
+        }
+        Ok(())
+    }
+
+    async fn relocate_accounts(&mut self, slot: u64, id: u8) -> Result<()> {
+        let relocated_accounts = self.index.accounts_on_file(slot, id);
+        for key in relocated_accounts {
+            #[expect(clippy::unwrap_used, reason = "the list was retrieved just before")]
+            let account = self.index.load(&key).await?.unwrap();
+            let new_loc = AccountDiskLocation::new_from_write(&account, slot).await?;
+            self.index.set_account(key, new_loc);
+        }
         Ok(())
     }
 }
@@ -102,15 +139,16 @@ impl Vault {
 mod tests {
 
     use std::assert_matches::assert_matches;
-    use std::fs::remove_dir_all;
+    use std::fs::{read_dir, remove_dir_all};
 
     use test_log::test;
 
     use crate::account::Wallet;
     use crate::crypto::{Keypair, Pubkey};
     use crate::io::index::Index;
-    use crate::io::location::{AccountDiskLocation, MAX_ACCOUNT_FILE_SIZE};
+    use crate::io::location::AccountDiskLocation;
     use crate::io::support::read_from_file;
+    use crate::io::MAX_ACCOUNT_FILE_SIZE;
 
     // use super::super::Error;
     use super::*;
@@ -152,9 +190,9 @@ mod tests {
         let loc2 = AccountDiskLocation::new_from_write(&wallet2, 82).await?;
         let loc3 = AccountDiskLocation::new_from_write(&wallet3, 82).await?;
 
-        index.add_account(key1, loc1);
-        index.add_account(key2, loc2);
-        index.add_account(key3, loc3);
+        index.set_account(key1, loc1);
+        index.set_account(key2, loc2);
+        index.set_account(key3, loc3);
         index.save().await?;
 
         Ok(vec![key1, key2, key3])
@@ -269,7 +307,7 @@ mod tests {
     #[test(tokio::test)]
     async fn updated_account_loc_trashed() -> TestResult {
         // Given
-        const VAULT: &str = "/tmp/bifrost/trash-1";
+        const VAULT: &str = "/tmp/bifrost/vault-6";
         reset_vault(VAULT)?;
         let mut vault = Vault::load_or_create().await?;
         let key = Keypair::generate().pubkey();
@@ -280,9 +318,108 @@ mod tests {
         // When
         account.prisms = 397_983;
         vault.save_account(key, &account, 1).await?;
+        account.prisms = 83;
+        vault.save_account(key, &account, 2).await?;
 
         // Then
-        assert_eq!(vault.trash.len(), 1);
+        assert_eq!(vault.trash.len(), 2);
+
+        Ok(())
+    }
+
+    #[expect(clippy::default_numeric_fallback)]
+    #[test(tokio::test)]
+    async fn cleanup_vault() -> TestResult {
+        // Given
+        const VAULT: &str = "/tmp/bifrost/vault-7";
+        reset_vault(VAULT)?;
+        let mut vault = Vault::load_or_create().await?;
+        let key = Keypair::generate().pubkey();
+
+        for slot in 0..4 {
+            for i in 0..100 {
+                if i % 2 == 0 {
+                    vault
+                        .save_account(key, &Wallet { prisms: 983_373 }, slot)
+                        .await?;
+                } else {
+                    vault
+                        .save_account(Keypair::generate().pubkey(), &Wallet { prisms: 99 }, slot)
+                        .await?;
+                }
+            }
+        }
+
+        // When
+        vault.cleanup(5).await?;
+
+        // Then
+        assert_eq!(read_dir(get_vault_path().join("accounts"))?.count(), 8);
+
+        Ok(())
+    }
+
+    #[expect(clippy::default_numeric_fallback)]
+    #[test(tokio::test)]
+    async fn double_cleanup_no_effect() -> TestResult {
+        // Given
+        const VAULT: &str = "/tmp/bifrost/vault-8";
+        reset_vault(VAULT)?;
+        let mut vault = Vault::load_or_create().await?;
+        let key = Keypair::generate().pubkey();
+
+        for slot in 0..4 {
+            for i in 0..100 {
+                if i % 2 == 0 {
+                    vault
+                        .save_account(key, &Wallet { prisms: 983_373 }, slot)
+                        .await?;
+                } else {
+                    vault
+                        .save_account(Keypair::generate().pubkey(), &Wallet { prisms: 99 }, slot)
+                        .await?;
+                }
+            }
+        }
+
+        // When
+        vault.cleanup(5).await?;
+        vault.cleanup(5).await?;
+
+        // Then
+        assert_eq!(read_dir(get_vault_path().join("accounts"))?.count(), 8);
+
+        Ok(())
+    }
+
+    #[expect(clippy::default_numeric_fallback)]
+    #[test(tokio::test)]
+    async fn cleanup_ignore_current_slot() -> TestResult {
+        // Given
+        const VAULT: &str = "/tmp/bifrost/vault-9";
+        reset_vault(VAULT)?;
+        let mut vault = Vault::load_or_create().await?;
+        let key = Keypair::generate().pubkey();
+
+        for slot in 0..4 {
+            for i in 0..100 {
+                if i % 2 == 0 {
+                    vault
+                        .save_account(key, &Wallet { prisms: 983_373 }, slot)
+                        .await?;
+                } else {
+                    vault
+                        .save_account(Keypair::generate().pubkey(), &Wallet { prisms: 99 }, slot)
+                        .await?;
+                }
+            }
+        }
+
+        // When
+        vault.cleanup(3).await?;
+
+        // Then
+        assert_eq!(read_dir(get_vault_path().join("accounts"))?.count(), 10);
 
         Ok(())
     }

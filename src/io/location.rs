@@ -3,7 +3,7 @@
 // Creation date: Sunday 09 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Sunday 09 February 2025 @ 21:08:15
+// Last modified: Tuesday 11 February 2025 @ 11:19:48
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -36,7 +36,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use tokio::sync::RwLock;
 use tracing::{debug, instrument, trace};
 
-use crate::account::Wallet;
+use crate::{account::Wallet, io::MAX_ACCOUNT_FILE_SIZE};
 
 use super::{
     support::{append_to_file, read_from_file_map},
@@ -45,14 +45,6 @@ use super::{
 };
 
 static SLOT_ID: LazyLock<RwLock<HashMap<u64, u8>>> = LazyLock::new(|| RwLock::new(HashMap::new()));
-
-#[cfg(test)]
-#[cfg_attr(test, mutants::skip)]
-pub const MAX_ACCOUNT_FILE_SIZE: u64 = 250;
-
-#[cfg(not(test))]
-#[cfg_attr(not(test), mutants::skip)]
-pub const MAX_ACCOUNT_FILE_SIZE: u64 = 10 * 1024 * 1024;
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
 pub struct AccountDiskLocation {
@@ -134,7 +126,7 @@ impl AccountDiskLocation {
             .unwrap_or_default()
     }
 
-    fn get_path(slot: u64, id: u8) -> PathBuf {
+    pub fn get_path(slot: u64, id: u8) -> PathBuf {
         get_vault_path()
             .join("accounts")
             .join(format!("{slot}.{id}"))

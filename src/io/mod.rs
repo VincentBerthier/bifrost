@@ -3,7 +3,7 @@
 // Creation date: Sunday 09 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Sunday 09 February 2025 @ 01:32:23
+// Last modified: Monday 10 February 2025 @ 20:49:48
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -35,3 +35,13 @@ mod vault;
 
 pub use error::Error;
 type Result<T> = core::result::Result<T, Error>;
+
+/// Maximum size for an account file.
+#[cfg(test)]
+#[cfg_attr(test, mutants::skip)]
+pub const MAX_ACCOUNT_FILE_SIZE: u64 = 250;
+
+/// Maximum size for an account file.
+#[cfg(not(test))]
+#[cfg_attr(not(test), mutants::skip)]
+pub const MAX_ACCOUNT_FILE_SIZE: u64 = 10 * 1024 * 1024;

@@ -3,7 +3,7 @@
 // Creation date: Sunday 09 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Sunday 09 February 2025 @ 16:15:10
+// Last modified: Monday 10 February 2025 @ 20:49:48
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -183,7 +183,7 @@ mod tests {
     }
 
     #[test(tokio::test)]
-    async fn cannot_read_out_of_bounds() -> TestResult {
+    async fn simple_read() -> TestResult {
         // Given
         let root_path = Path::new("/tmp/bifrost/io-support-1").join("accounts");
         if !root_path.exists() {
@@ -194,13 +194,34 @@ mod tests {
             remove_file(&path).await?;
         }
         let wallet = Wallet { prisms: 989_237 };
-        let (size, _offset) = append_to_file(&path, &wallet).await?;
+        let (write_size, _offset) = append_to_file(&path, &wallet).await?;
+        let _ = append_to_file(&path, &wallet).await?;
 
         // When
-        let reloaded: Result<Wallet> = read_from_file_map(path, size, size).await;
+        let _: Wallet = read_from_file_map(path, write_size, write_size).await?;
+
+        Ok(())
+    }
+
+    #[test(tokio::test)]
+    async fn cannot_read_out_of_bounds() -> TestResult {
+        // Given
+        let root_path = Path::new("/tmp/bifrost/io-support-2").join("accounts");
+        if !root_path.exists() {
+            create_folder(&root_path).await?;
+        }
+        let path = root_path.join("0.1");
+        if path.exists() {
+            remove_file(&path).await?;
+        }
+        let wallet = Wallet { prisms: 989_237 };
+        let (write_size, _offset) = append_to_file(&path, &wallet).await?;
+
+        // When
+        let reloaded: Result<Wallet> = read_from_file_map(path, write_size, write_size).await;
 
         // Then
-        assert_matches!(reloaded, Err(Error::OutOfBounds { .. }));
+        assert_matches!(reloaded, Err(Error::OutOfBounds { from, to, size }) if from == 8 && to == 16 && size == 8);
 
         Ok(())
     }

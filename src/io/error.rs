@@ -3,7 +3,7 @@
 // Creation date: Sunday 09 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Sunday 09 February 2025 @ 16:52:33
+// Last modified: Monday 10 February 2025 @ 20:49:48
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -28,10 +28,18 @@
 
 use derive_more::derive::{Display, From};
 
+use super::location::AccountDiskLocation;
+
 /// Errors of the I/O module.
 #[derive(Debug, Display, From)]
 #[display("during an I/O operation: {_variant}")]
 pub enum Error {
+    /// Tried to put the same location twice in the trash
+    #[display("attempted to put {loc:?} in the trash twice")]
+    DuplicateLocationInTrash {
+        /// The duplicated location
+        loc: AccountDiskLocation,
+    },
     /// The index file wasn't found.
     #[display("the index file wasn’t found")]
     IndexFileNotFound,
@@ -45,6 +53,9 @@ pub enum Error {
         /// Actual size of the file
         size: u64,
     },
+    /// The trash file wasn't found.
+    #[display("the trash file wasn’t found")]
+    TrashFileNotFound,
     /// An operation on the file system couldn't be completed.
     #[from]
     #[display("filesystem error '{_0}'")]

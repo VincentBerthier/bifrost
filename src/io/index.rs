@@ -3,7 +3,7 @@
 // Creation date: Sunday 09 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Sunday 09 February 2025 @ 16:15:45
+// Last modified: Tuesday 11 February 2025 @ 11:31:28
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -63,9 +63,7 @@ impl Index {
         if !index_path.exists() {
             return Err(Error::IndexFileNotFound);
         }
-        let accounts = read_from_file(index_path).await?;
-
-        Ok(Self { accounts })
+        read_from_file(index_path).await
     }
 
     pub async fn load(&self, key: &Pubkey) -> Result<Option<Wallet>> {
@@ -81,9 +79,19 @@ impl Index {
     }
 
     #[instrument(skip_all, fields(%key))]
-    pub fn add_account(&mut self, key: Pubkey, loc: AccountDiskLocation) {
+    pub fn set_account(&mut self, key: Pubkey, loc: AccountDiskLocation) {
         debug!("adding account to the index");
         self.accounts.insert(key, loc);
+    }
+
+    #[instrument(skip(self))]
+    pub fn accounts_on_file(&self, slot: u64, id: u8) -> Vec<Pubkey> {
+        self.accounts
+            .iter()
+            .filter(|(_key, loc)| loc.slot == slot && loc.id == id)
+            .map(|(key, _loc)| key)
+            .copied()
+            .collect()
     }
 
     #[instrument(skip_all)]
@@ -102,7 +110,12 @@ impl Index {
 mod tests {
     #![expect(clippy::unwrap_used)]
 
-    use std::{assert_matches::assert_matches, fs::OpenOptions, io::Write, path::Path};
+    use std::{
+        assert_matches::assert_matches,
+        fs::{remove_dir_all, OpenOptions},
+        io::Write,
+        path::Path,
+    };
 
     use test_log::test;
 
@@ -112,12 +125,26 @@ mod tests {
         io::{
             support::append_to_file,
             vault::{set_vault_path, Vault},
+            MAX_ACCOUNT_FILE_SIZE,
         },
     };
 
     // use super::super::Error;
     use super::*;
     type TestResult = core::result::Result<(), Box<dyn core::error::Error>>;
+
+    fn reset_vault<P>(path: P) -> Result<()>
+    where
+        P: Into<PathBuf>,
+    {
+        let path = path.into();
+        set_vault_path(&path);
+        if path.exists() {
+            remove_dir_all(path)?;
+        }
+
+        Ok(())
+    }
 
     async fn generate_dummy_index(vault_path: &str) -> TestResult {
         set_vault_path(vault_path);
@@ -185,7 +212,7 @@ mod tests {
         let key = Keypair::generate().pubkey();
 
         // When
-        index.add_account(key, loc);
+        index.set_account(key, loc);
 
         // Then
         assert_matches!(index.find(&key), Some(l) if *l == loc);
@@ -207,7 +234,7 @@ mod tests {
             size: 0,
         };
         let key = Keypair::generate().pubkey();
-        index.add_account(key, loc);
+        index.set_account(key, loc);
 
         // When
         index.save().await?;
@@ -227,7 +254,7 @@ mod tests {
         let mut index = Index::load_or_create().await;
         let loc = AccountDiskLocation::default();
         let key = Keypair::generate().pubkey();
-        index.add_account(key, loc);
+        index.set_account(key, loc);
 
         // When
         let res = index.save().await;
@@ -266,6 +293,41 @@ mod tests {
 
         // Then
         assert_eq!(from_file, account);
+        Ok(())
+    }
+
+    #[expect(clippy::default_numeric_fallback, clippy::integer_division)]
+    #[test(tokio::test)]
+    async fn find_accounts_on_file() -> TestResult {
+        // Given
+        const VAULT: &str = "/tmp/bifrost/index-6";
+        const SLOT: u64 = 1;
+        reset_vault(VAULT)?;
+        let mut vault = Vault::load_or_create().await?;
+        let key = Keypair::generate().pubkey();
+
+        for i in 0..100 {
+            if i % 2 == 0 {
+                vault
+                    .save_account(key, &Wallet { prisms: 983_373 }, SLOT)
+                    .await?;
+            } else {
+                vault
+                    .save_account(Keypair::generate().pubkey(), &Wallet { prisms: 99 }, SLOT)
+                    .await?;
+            }
+        }
+        vault.save().await?;
+        let index = Index::load_from_disk().await?;
+
+        // When
+        let accounts_on_file = index.accounts_on_file(SLOT, 0);
+
+        // Then
+        let expected =
+            MAX_ACCOUNT_FILE_SIZE / borsh::to_vec(&Wallet { prisms: 0 })?.len() as u64 / 2 + 1;
+        assert_eq!(accounts_on_file.len() as u64, expected);
+
         Ok(())
     }
 }
