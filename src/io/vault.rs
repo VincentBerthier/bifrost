@@ -57,12 +57,21 @@ pub fn get_vault_path() -> &'static PathBuf {
     VAULT_PATH.get().expect("vault path is not set")
 }
 
+/// Storage for all accounts on the blockchain.
 pub struct Vault {
+    /// The index of known accounts.
     index: Index,
+    /// The list of out-of-date accounts stored on the disk.
     trash: Trash,
 }
 
 impl Vault {
+    /// Load or creates the vault.
+    ///
+    /// # Errors
+    /// Only if the vault could not be initialized,
+    /// which would only happen because of a file system error
+    /// such as a permission issue.
     pub async fn load_or_create() -> Result<Self> {
         Self::init_vault().await?;
         Ok(Self {
@@ -71,6 +80,12 @@ impl Vault {
         })
     }
 
+    /// Initializes the vault.
+    ///
+    /// This mostly just creates the folder architecture if it's needed.
+    ///
+    /// # Errors
+    /// Can only happen in case of file system errors.
     #[mutants::skip]
     #[instrument]
     pub async fn init_vault() -> Result<()> {
@@ -86,12 +101,28 @@ impl Vault {
         Ok(())
     }
 
+    /// Creates or loads an account from the disk.
+    ///
+    /// # Parameters
+    /// * `key` - The public key of the account to load/create,
+    ///
+    /// # Errors
+    /// If the index failed to load an existing account.
     pub async fn get(&self, key: &Pubkey) -> Result<Wallet> {
         Ok((self.index.load(key).await?).unwrap_or_default())
     }
 
     // TODO: will need to handle saving the same account multiple times for the same slot
     // it could work as it is, it’s just inneficient
+    /// Saves an account on the disk.
+    ///
+    /// # Parameters
+    /// * `key` - The public key of the account to save,
+    /// * `acconut` - The account to save,
+    /// * `slot` - The current slot.
+    ///
+    /// # Errors
+    /// Only if there was a problem saving the account on the disk.
     pub async fn save_account(&mut self, key: Pubkey, account: &Wallet, slot: u64) -> Result<()> {
         if let Some(&old_loc) = self.index.find(&key) {
             self.trash.insert(old_loc)?;
@@ -103,11 +134,26 @@ impl Vault {
         Ok(())
     }
 
+    /// Saves the vault on the disk (index and trash).
+    ///
+    /// # Errors
+    /// Only if there was a problem saving the vault on the disk.
     pub async fn save(&self) -> Result<()> {
         self.index.save().await?;
         self.trash.save().await
     }
 
+    /// Trims the accounts on the disk.
+    ///
+    /// When existing accounts are updated, their old data stays on the disk
+    /// for archive purposes. The only files that are not touched (yet) are
+    /// those for the latest slot.
+    ///
+    /// # Errors
+    /// Only on I/O issues.
+    ///
+    /// # Parameters
+    /// * `current_slot` - The current slot the blockchain is working on.
     pub async fn cleanup(&mut self, current_slot: u64) -> Result<()> {
         let to_clean = self.trash.get_files_to_clean().await;
         for file in to_clean {

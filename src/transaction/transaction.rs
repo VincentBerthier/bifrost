@@ -154,7 +154,8 @@ impl Transaction {
     /// # Returns
     /// The transaction's signature if it exists
     #[expect(clippy::missing_const_for_fn, reason = "false positive")]
-    fn signature(&self) -> Option<&Signature> {
+    #[must_use]
+    pub fn signature(&self) -> Option<&Signature> {
         self.signatures.first()
     }
 

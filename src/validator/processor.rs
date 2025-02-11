@@ -27,22 +27,39 @@
 // SOFTWARE.
 
 use std::{
-    collections::VecDeque,
-    sync::{Arc, LazyLock, Mutex},
+    collections::{HashMap, VecDeque},
+    sync::{Arc, LazyLock, OnceLock},
 };
 
-use tokio::sync::Notify;
+use tokio::sync::{Mutex, Notify};
 use tracing::{debug, instrument, trace, warn};
 
 use super::{Error, Result};
-use crate::transaction::Transaction;
+use crate::{crypto::Signature, io::Vault, transaction::Transaction};
 
 static TRANSACTION_QUEUE: LazyLock<Mutex<VecDeque<Transaction>>> =
     LazyLock::new(|| Mutex::new(VecDeque::new()));
 static TRANSACTION_RECEIVED: LazyLock<Arc<Notify>> = LazyLock::new(|| Arc::new(Notify::new()));
+static TRANSACTIONS_STATUS: LazyLock<Arc<Mutex<HashMap<Signature, Status>>>> =
+    LazyLock::new(|| Arc::new(Mutex::new(HashMap::new())));
+
+static VAULT: OnceLock<Arc<Vault>> = OnceLock::new();
+
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+enum Status {
+    Failed,
+    #[default]
+    Pending,
+    Running,
+    Succeeded,
+}
+
+async fn update_trx_status(sig: Signature, status: Status) {
+    TRANSACTIONS_STATUS.lock().await.insert(sig, status);
+}
 
 #[instrument(skip_all)]
-fn register_transaction(trx: Transaction) -> Result<()> {
+async fn register_transaction(trx: Transaction) -> Result<()> {
     debug!("registering new transaction");
     if !trx.is_valid() {
         warn!("cannot add an invalid transaction (signature issue)");
@@ -50,29 +67,26 @@ fn register_transaction(trx: Transaction) -> Result<()> {
     }
 
     trace!("adding transaction");
-    #[expect(
-        clippy::unwrap_used,
-        reason = "if it panics, something is really wrong anyway"
-    )]
-    TRANSACTION_QUEUE.lock().unwrap().push_back(trx);
+    #[expect(clippy::unwrap_used, reason = "trx is valid, so signature exists")]
+    update_trx_status(trx.signature().copied().unwrap(), Status::Pending).await;
+    TRANSACTION_QUEUE.lock().await.push_back(trx);
     TRANSACTION_RECEIVED.notify_one();
 
     Ok(())
 }
 
+#[expect(clippy::unwrap_used, reason = "trx is valid, so signature exists")]
 #[instrument]
 async fn processor() -> ! {
     loop {
         trace!("waiting for notification");
         TRANSACTION_RECEIVED.notified().await;
-        #[expect(
-            clippy::unwrap_used,
-            reason = "if it panics, something is really wrong anyway"
-        )]
-        let Some(_trx) = TRANSACTION_QUEUE.lock().unwrap().pop_front() else {
+        let Some(trx) = TRANSACTION_QUEUE.lock().await.pop_front() else {
             warn!("got notified of transaction presence but didn’t find one…");
             continue;
         };
+        let sig = *trx.signature().unwrap();
+        update_trx_status(sig, Status::Succeeded).await;
     }
 }
 
@@ -85,7 +99,7 @@ mod tests {
 
     use ed25519_dalek::PUBLIC_KEY_LENGTH;
     use test_log::test;
-    use tokio::time::sleep;
+    use tokio::time::{sleep, Duration};
 
     use crate::account::{InstructionAccountMeta, Writable};
     use crate::crypto::{Keypair, Pubkey};
@@ -137,31 +151,31 @@ mod tests {
         tokio::spawn(async { processor().await });
     }
 
-    #[test]
-    fn accepts_valid_transactions_only() -> TestResult {
+    #[test(tokio::test)]
+    async fn accepts_valid_transactions_only() -> TestResult {
         // Given
         let trx = create_unsigned_transaction()?;
         let trx_signed = create_signed_transaction()?;
 
         // When
-        let res = register_transaction(trx);
-        register_transaction(trx_signed)?;
+        let res = register_transaction(trx).await;
+        register_transaction(trx_signed).await?;
 
         // Then
         assert_matches!(res, Err(Error::InvalidTransactionSignatures));
         Ok(())
     }
 
-    #[test]
-    fn add_transaction_to_queue() -> TestResult {
+    #[test(tokio::test)]
+    async fn add_transaction_to_queue() -> TestResult {
         // Given
         let trx = create_signed_transaction()?;
 
         // When
-        register_transaction(trx)?;
+        register_transaction(trx).await?;
 
         // Then
-        assert_eq!(TRANSACTION_QUEUE.lock().unwrap().len(), 1);
+        assert_eq!(TRANSACTION_QUEUE.lock().await.len(), 1);
         Ok(())
     }
 
@@ -170,13 +184,30 @@ mod tests {
         // Given
         let trx = create_signed_transaction()?;
         launch_transaction_processor();
-        register_transaction(trx)?;
+        register_transaction(trx).await?;
 
         // When
-        sleep(tokio::time::Duration::from_millis(2)).await;
+        sleep(Duration::from_millis(2)).await;
 
         // Then
-        assert!(TRANSACTION_QUEUE.lock().unwrap().is_empty());
+        assert!(TRANSACTION_QUEUE.lock().await.is_empty());
+        Ok(())
+    }
+
+    #[test(tokio::test)]
+    async fn processing_transaction_marks_it_suceeded() -> TestResult {
+        // Given
+        let trx = create_signed_transaction()?;
+        let sig = *trx.signature().unwrap();
+        launch_transaction_processor();
+        register_transaction(trx).await?;
+
+        // When
+        sleep(Duration::from_millis(2)).await;
+
+        // Then
+        assert_matches!(TRANSACTIONS_STATUS.lock().await.get(&sig), Some(&status) if status == Status::Succeeded);
+
         Ok(())
     }
 }

@@ -35,7 +35,7 @@ use tracing::{debug, instrument};
 use super::{Pubkey, Result};
 
 /// The signature of a transaction.
-#[derive(Copy, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
+#[derive(Copy, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize, Hash)]
 pub struct Signature {
     data: [u8; SIGNATURE_LENGTH],
 }
