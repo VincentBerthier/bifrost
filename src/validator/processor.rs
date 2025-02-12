@@ -101,7 +101,7 @@ mod tests {
     use test_log::test;
     use tokio::time::{sleep, Duration};
 
-    use crate::account::{InstructionAccountMeta, Writable};
+    use crate::account::{AccountMeta, Writable};
     use crate::crypto::{Keypair, Pubkey};
     use crate::transaction::{Instruction, Transaction};
 
@@ -118,8 +118,8 @@ mod tests {
         let instruction = Instruction::new(
             PROGRAM,
             vec![
-                InstructionAccountMeta::signing(keypair.pubkey(), Writable::Yes)?,
-                InstructionAccountMeta::wallet(keypair.pubkey(), Writable::No)?,
+                AccountMeta::signing(keypair.pubkey(), Writable::Yes)?,
+                AccountMeta::wallet(keypair.pubkey(), Writable::No)?,
             ],
             &Vec::<u8>::new(),
         );
@@ -135,8 +135,8 @@ mod tests {
         let instruction = Instruction::new(
             PROGRAM,
             vec![
-                InstructionAccountMeta::signing(keypair.pubkey(), Writable::Yes)?,
-                InstructionAccountMeta::wallet(keypair.pubkey(), Writable::No)?,
+                AccountMeta::signing(keypair.pubkey(), Writable::Yes)?,
+                AccountMeta::wallet(keypair.pubkey(), Writable::No)?,
             ],
             &Vec::<u8>::new(),
         );

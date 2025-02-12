@@ -28,7 +28,7 @@
 
 use borsh::{BorshDeserialize, BorshSerialize};
 
-use crate::{account::InstructionAccountMeta, crypto::Pubkey};
+use crate::{account::AccountMeta, crypto::Pubkey};
 
 #[derive(Clone, Debug, Default, BorshSerialize, BorshDeserialize)]
 pub struct CompiledInstruction {
@@ -43,7 +43,7 @@ pub struct Instruction {
     /// Public key of the program to run.
     program_id: Pubkey,
     /// List of accounts expected by the instruction.
-    accounts: Vec<InstructionAccountMeta>,
+    accounts: Vec<AccountMeta>,
     /// Binary encoded payload for the transaction.
     data: Vec<u8>,
 }
@@ -61,7 +61,7 @@ impl Instruction {
     /// ```rust
     /// # use bifrost::{
     ///     Error,
-    ///     account::{InstructionAccountMeta, Writable},
+    ///     account::{AccountMeta, Writable},
     ///     crypto::{Keypair, Pubkey},
     ///     transaction::Instruction
     /// };
@@ -69,7 +69,7 @@ impl Instruction {
     /// let keypair = Keypair::generate();
     /// let instr = Instruction::new(
     ///     PROGRAM,
-    ///     vec![InstructionAccountMeta::signing(keypair.pubkey(), Writable::Yes)?],
+    ///     vec![AccountMeta::signing(keypair.pubkey(), Writable::Yes)?],
     ///     &Vec::<u8>::new()
     /// );
     /// // write me later
@@ -78,7 +78,7 @@ impl Instruction {
     #[expect(clippy::unwrap_used)]
     pub fn new<A, D>(program_id: Pubkey, accounts: A, payload: &D) -> Self
     where
-        A: Into<Vec<InstructionAccountMeta>>,
+        A: Into<Vec<AccountMeta>>,
         D: BorshSerialize,
     {
         let data = borsh::to_vec(payload).unwrap();
@@ -104,7 +104,7 @@ impl Instruction {
 
     /// Get the list of accounts expected by the instruction.
     #[must_use]
-    pub fn accounts(&self) -> &[InstructionAccountMeta] {
+    pub fn accounts(&self) -> &[AccountMeta] {
         &self.accounts
     }
 }

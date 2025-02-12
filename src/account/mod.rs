@@ -27,12 +27,13 @@
 // SOFTWARE.
 
 mod error;
+mod instruction;
 mod meta;
 mod onchain;
 mod types;
 
 pub use error::Error;
-pub use meta::InstructionAccountMeta;
+pub use meta::AccountMeta;
 pub use onchain::wallet::Wallet;
 pub use types::Writable;
 

@@ -72,13 +72,13 @@ impl Transaction {
     /// # use bifrost::{
     ///     Error,
     ///     crypto::{Pubkey, Keypair},
-    ///     account::{InstructionAccountMeta, Writable},
+    ///     account::{AccountMeta, Writable},
     ///     transaction::{Instruction, Transaction}
     /// };
     /// # const PROGRAM: Pubkey = Pubkey::from_bytes(&[2; 32]);
     /// let keypair = Keypair::generate();
     /// let mut trx = Transaction::new(0);
-    /// let instruction = Instruction::new(PROGRAM, vec![InstructionAccountMeta::signing(keypair.pubkey(), Writable::Yes)?], &Vec::<u8>::new());
+    /// let instruction = Instruction::new(PROGRAM, vec![AccountMeta::signing(keypair.pubkey(), Writable::Yes)?], &Vec::<u8>::new());
     /// trx.add(&[instruction])?;
     /// # Ok::<(), Error>(())
     /// ```
@@ -104,13 +104,13 @@ impl Transaction {
     /// # use bifrost::{
     ///     Error,
     ///     crypto::{Pubkey, Keypair},
-    ///     account::{InstructionAccountMeta, Writable},
+    ///     account::{AccountMeta, Writable},
     ///     transaction::{Instruction, Transaction}
     /// };
     /// # const PROGRAM: Pubkey = Pubkey::from_bytes(&[2; 32]);
     /// let keypair = Keypair::generate();
     /// # let mut trx = Transaction::new(0);
-    /// # let instruction = Instruction::new(PROGRAM, vec![InstructionAccountMeta::signing(keypair.pubkey(), Writable::Yes)?], &Vec::<u8>::new());
+    /// # let instruction = Instruction::new(PROGRAM, vec![AccountMeta::signing(keypair.pubkey(), Writable::Yes)?], &Vec::<u8>::new());
     /// # trx.add(&[instruction])?;
     /// trx.sign(&keypair)?;
     /// # Ok::<(), Error>(())
@@ -212,7 +212,7 @@ mod tests {
     use ed25519_dalek::PUBLIC_KEY_LENGTH;
     use test_log::test;
 
-    use crate::account::{InstructionAccountMeta, Writable};
+    use crate::account::{AccountMeta, Writable};
 
     use super::*;
     type Error = Box<dyn core::error::Error>;
@@ -222,7 +222,7 @@ mod tests {
 
     fn get_instruction<A>(accounts: A) -> Instruction
     where
-        A: Into<Vec<InstructionAccountMeta>>,
+        A: Into<Vec<AccountMeta>>,
     {
         Instruction::new(PROGRAM, accounts.into(), &Vec::<u8>::new())
     }
@@ -233,8 +233,8 @@ mod tests {
         let keypair = Keypair::generate();
         let mut trx = Transaction::new(0);
         let instruction = get_instruction(vec![
-            InstructionAccountMeta::signing(keypair.pubkey(), Writable::Yes)?,
-            InstructionAccountMeta::wallet(keypair.pubkey(), Writable::No)?,
+            AccountMeta::signing(keypair.pubkey(), Writable::Yes)?,
+            AccountMeta::wallet(keypair.pubkey(), Writable::No)?,
         ]);
 
         // When
@@ -252,10 +252,8 @@ mod tests {
         // Given
         let keypair = Keypair::generate();
         let mut trx = Transaction::new(0);
-        let instruction = get_instruction(vec![InstructionAccountMeta::signing(
-            keypair.pubkey(),
-            Writable::Yes,
-        )?]);
+        let instruction =
+            get_instruction(vec![AccountMeta::signing(keypair.pubkey(), Writable::Yes)?]);
         trx.add(&[instruction.clone()])?;
 
         // When
@@ -273,10 +271,8 @@ mod tests {
         // Given
         let keypair = Keypair::generate();
         let mut trx = Transaction::new(0);
-        let instruction = get_instruction(vec![InstructionAccountMeta::signing(
-            keypair.pubkey(),
-            Writable::Yes,
-        )?]);
+        let instruction =
+            get_instruction(vec![AccountMeta::signing(keypair.pubkey(), Writable::Yes)?]);
         trx.add(&[instruction])?;
 
         let signer = Keypair::generate();
@@ -295,10 +291,8 @@ mod tests {
         // Given
         let keypair = Keypair::generate();
         let mut trx = Transaction::new(0);
-        let instruction = get_instruction(vec![InstructionAccountMeta::signing(
-            keypair.pubkey(),
-            Writable::Yes,
-        )?]);
+        let instruction =
+            get_instruction(vec![AccountMeta::signing(keypair.pubkey(), Writable::Yes)?]);
         trx.add(&[instruction])?;
         trx.sign(&keypair)?;
 
@@ -317,17 +311,13 @@ mod tests {
         // Given
         let keypair = Keypair::generate();
         let mut trx = Transaction::new(0);
-        let instruction1 = get_instruction(vec![InstructionAccountMeta::signing(
-            keypair.pubkey(),
-            Writable::Yes,
-        )?]);
+        let instruction1 =
+            get_instruction(vec![AccountMeta::signing(keypair.pubkey(), Writable::Yes)?]);
         trx.add(&[instruction1])?;
 
         // When
-        let instruction2 = get_instruction(vec![InstructionAccountMeta::wallet(
-            keypair.pubkey(),
-            Writable::No,
-        )?]);
+        let instruction2 =
+            get_instruction(vec![AccountMeta::wallet(keypair.pubkey(), Writable::No)?]);
         trx.add(&[instruction2])?;
 
         // Then
@@ -343,12 +333,11 @@ mod tests {
         let key2 = Keypair::generate().pubkey();
         let mut trx = Transaction::new(0);
         let instruction1 = get_instruction(vec![
-            InstructionAccountMeta::signing(keypair.pubkey(), Writable::Yes)?,
-            InstructionAccountMeta::wallet(key2, Writable::No)?,
+            AccountMeta::signing(keypair.pubkey(), Writable::Yes)?,
+            AccountMeta::wallet(key2, Writable::No)?,
         ]);
         trx.add(&[instruction1])?;
-        let instruction2 =
-            get_instruction(vec![InstructionAccountMeta::wallet(key2, Writable::Yes)?]);
+        let instruction2 = get_instruction(vec![AccountMeta::wallet(key2, Writable::Yes)?]);
 
         // When
         trx.add(&[instruction2])?;
@@ -371,12 +360,11 @@ mod tests {
         let key2 = Keypair::generate().pubkey();
         let mut trx = Transaction::new(0);
         let instruction1 = get_instruction(vec![
-            InstructionAccountMeta::signing(keypair.pubkey(), Writable::Yes)?,
-            InstructionAccountMeta::wallet(key2, Writable::No)?,
+            AccountMeta::signing(keypair.pubkey(), Writable::Yes)?,
+            AccountMeta::wallet(key2, Writable::No)?,
         ]);
         trx.add(&[instruction1])?;
-        let instruction2 =
-            get_instruction(vec![InstructionAccountMeta::signing(key2, Writable::Yes)?]);
+        let instruction2 = get_instruction(vec![AccountMeta::signing(key2, Writable::Yes)?]);
 
         // When
         trx.add(&[instruction2])?;
@@ -397,8 +385,8 @@ mod tests {
         // Given
         let keypair = Keypair::generate();
         let instruction = get_instruction(vec![
-            InstructionAccountMeta::signing(keypair.pubkey(), Writable::Yes)?,
-            InstructionAccountMeta::wallet(keypair.pubkey(), Writable::No)?,
+            AccountMeta::signing(keypair.pubkey(), Writable::Yes)?,
+            AccountMeta::wallet(keypair.pubkey(), Writable::No)?,
         ]);
 
         let mut trx1 = Transaction::new(0);
@@ -423,8 +411,8 @@ mod tests {
         let signer = Keypair::generate();
         let mut trx = Transaction::new(0);
         let instruction = get_instruction(vec![
-            InstructionAccountMeta::signing(payer.pubkey(), Writable::Yes)?,
-            InstructionAccountMeta::signing(signer.pubkey(), Writable::No)?,
+            AccountMeta::signing(payer.pubkey(), Writable::Yes)?,
+            AccountMeta::signing(signer.pubkey(), Writable::No)?,
         ]);
         trx.add(&[instruction])?;
         trx.sign(&signer)?;

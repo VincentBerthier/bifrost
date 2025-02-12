@@ -31,7 +31,7 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use tracing::{debug, instrument, trace};
 
-use crate::{account::InstructionAccountMeta, crypto::Pubkey};
+use crate::{account::AccountMeta, crypto::Pubkey};
 
 use super::{
     instruction::{CompiledInstruction, Instruction},
@@ -46,7 +46,7 @@ pub struct Message {
     /// The instruction of a transaction.
     instructions: Vec<CompiledInstruction>,
     /// List of accounts referenced by the transaction's instructions.
-    accounts: Vec<InstructionAccountMeta>,
+    accounts: Vec<AccountMeta>,
 }
 
 impl Message {
@@ -81,7 +81,7 @@ impl Message {
             compiled_accounts.push(idx);
         }
         let program_account_id =
-            self.find_or_add_account(&InstructionAccountMeta::program(*instruction.program())?)?;
+            self.find_or_add_account(&AccountMeta::program(*instruction.program())?)?;
 
         Ok(CompiledInstruction::new(
             program_account_id,
@@ -90,7 +90,7 @@ impl Message {
         ))
     }
 
-    fn find_or_add_account(&mut self, account: &InstructionAccountMeta) -> Result<u8> {
+    fn find_or_add_account(&mut self, account: &AccountMeta) -> Result<u8> {
         if let Some(idx) = self.find_account(account.key()) {
             trace!("account was found in position {idx} of the transaction accounts");
             self.accounts[idx as usize].merge(account)?;
@@ -122,7 +122,7 @@ impl Message {
     }
 
     #[expect(clippy::missing_const_for_fn, reason = "false positive")]
-    pub fn accounts(&self) -> &[InstructionAccountMeta] {
+    pub fn accounts(&self) -> &[AccountMeta] {
         &self.accounts
     }
 }
@@ -144,7 +144,7 @@ mod tests {
         // Given
         let empty_message = Message::new(0);
         let mut with_accounts = Message::new(0);
-        with_accounts.accounts.push(InstructionAccountMeta::signing(
+        with_accounts.accounts.push(AccountMeta::signing(
             Keypair::generate().pubkey(),
             Writable::Yes,
         )?);

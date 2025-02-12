@@ -38,7 +38,7 @@ use super::{
 
 /// The metadata of accounts an instruction will refer to.
 #[derive(Clone, Copy, Debug, BorshSerialize, BorshDeserialize)]
-pub struct InstructionAccountMeta {
+pub struct AccountMeta {
     /// The public key of the account.
     key: Pubkey,
     /// The type of account (important when there's a need to create it)
@@ -47,7 +47,7 @@ pub struct InstructionAccountMeta {
     writable: Writable,
 }
 
-impl InstructionAccountMeta {
+impl AccountMeta {
     /// Create metadata for a signing account.
     ///
     /// # Parameters
@@ -64,9 +64,9 @@ impl InstructionAccountMeta {
     /// ```rust
     /// # use bifrost::Error;
     /// # use bifrost::crypto::Keypair;
-    /// # use bifrost::account::{Writable, InstructionAccountMeta};
+    /// # use bifrost::account::{Writable, AccountMeta};
     /// let key = Keypair::generate().pubkey();
-    /// let meta = InstructionAccountMeta::signing(key, Writable::Yes)?;
+    /// let meta = AccountMeta::signing(key, Writable::Yes)?;
     /// assert!(meta.is_signing());
     ///
     /// # Ok::<(), Error>(())
@@ -96,9 +96,9 @@ impl InstructionAccountMeta {
     /// ```rust
     /// # use bifrost::Error;
     /// # use bifrost::crypto::Keypair;
-    /// # use bifrost::account::{Writable, InstructionAccountMeta};
+    /// # use bifrost::account::{Writable, AccountMeta};
     /// let key = Keypair::generate().pubkey();
-    /// let meta = InstructionAccountMeta::wallet(key, Writable::Yes)?;
+    /// let meta = AccountMeta::wallet(key, Writable::Yes)?;
     /// assert!(!meta.is_signing());
     ///
     /// # Ok::<(), Error>(())
@@ -137,10 +137,10 @@ impl InstructionAccountMeta {
     /// ```rust
     /// # use bifrost::Error;
     /// # use bifrost::crypto::{Keypair, Seeds};
-    /// # use bifrost::account::{Writable, InstructionAccountMeta};
+    /// # use bifrost::account::{Writable, AccountMeta};
     /// let seeds = Seeds::new(&[&b"key1"])?;
     /// let offcurve = seeds.generate_offcurve()?.0;
-    /// let meta = InstructionAccountMeta::program(offcurve)?;
+    /// let meta = AccountMeta::program(offcurve)?;
     /// assert!(!meta.is_signing());
     ///
     /// # Ok::<(), Error>(())
@@ -175,10 +175,10 @@ impl InstructionAccountMeta {
     ///
     /// # Example
     /// ```rust
-    /// # use bifrost::{Error, crypto::Keypair, account::{InstructionAccountMeta, Writable}};
+    /// # use bifrost::{Error, crypto::Keypair, account::{AccountMeta, Writable}};
     /// let key = Keypair::generate().pubkey();
-    /// let mut meta1 = InstructionAccountMeta::wallet(key, Writable::No)?;
-    /// let meta2 = InstructionAccountMeta::wallet(key, Writable::Yes)?;
+    /// let mut meta1 = AccountMeta::wallet(key, Writable::No)?;
+    /// let meta2 = AccountMeta::wallet(key, Writable::Yes)?;
     /// meta1.merge(&meta2);
     /// assert!(meta1.is_writable());
     /// # Ok::<(), Error>(())
@@ -240,8 +240,8 @@ mod tests {
         let oncurve = Keypair::generate().pubkey();
 
         // When
-        let _res = InstructionAccountMeta::program(offcurve)?;
-        let res = InstructionAccountMeta::program(oncurve);
+        let _res = AccountMeta::program(offcurve)?;
+        let res = AccountMeta::program(oncurve);
 
         // Then
         assert_matches!(
@@ -259,8 +259,8 @@ mod tests {
         let oncurve = Keypair::generate().pubkey();
 
         // When
-        let res1 = InstructionAccountMeta::wallet(oncurve, Writable::No)?;
-        let res2 = InstructionAccountMeta::wallet(offcurve, Writable::No);
+        let res1 = AccountMeta::wallet(oncurve, Writable::No)?;
+        let res2 = AccountMeta::wallet(offcurve, Writable::No);
 
         // Then
         assert!(!res1.is_writable());
@@ -277,8 +277,8 @@ mod tests {
         let seeds = Seeds::new(&[&b"key1"])?;
         let offcurve = seeds.generate_offcurve()?.0;
         let oncurve = Keypair::generate().pubkey();
-        let mut program = InstructionAccountMeta::program(offcurve)?;
-        let wallet = InstructionAccountMeta::wallet(oncurve, Writable::No)?;
+        let mut program = AccountMeta::program(offcurve)?;
+        let wallet = AccountMeta::wallet(oncurve, Writable::No)?;
 
         // When
         let res = program.merge(&wallet);

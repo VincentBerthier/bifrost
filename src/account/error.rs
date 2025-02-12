@@ -36,6 +36,9 @@ use super::types::AccountType;
 #[derive(Debug, Display, From)]
 #[display("during an account operation: {_variant}")]
 pub enum Error {
+    /// An operation would have caused an overflow.
+    #[display("arithmetic overflow")]
+    ArithmeticOverflow,
     /// Invalid key used to create account metadata
     #[display("invalid key use: {} (error: {:?})", key, kind)]
     MetaAccountCreation {
@@ -47,6 +50,12 @@ pub enum Error {
     /// Tried to merge accounts  of different types
     #[display("tried to merge accounts of different types ({:?}, {:?})", _0, _1)]
     MergeIncompatibleAccountTypes(AccountType, AccountType),
+    /// Tried to modify a read only account
+    #[display("account '{key}' is read-only but there was an attempt to modify it")]
+    ModificationOfReadOnlyAccount {
+        /// Public key of the account
+        key: Pubkey,
+    },
 }
 
 #[derive(Debug)]

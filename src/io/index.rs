@@ -147,7 +147,7 @@ mod tests {
     }
 
     async fn generate_dummy_index(vault_path: &str) -> TestResult {
-        set_vault_path(vault_path);
+        reset_vault(vault_path)?;
         Vault::init_vault().await?;
         let index_path = get_vault_path().join("index");
 
@@ -169,7 +169,7 @@ mod tests {
     async fn init_vault_folders() -> TestResult {
         // Given
         const VAULT: &str = "/tmp/bifrost/index-1";
-        set_vault_path(VAULT);
+        reset_vault(VAULT)?;
 
         // When
         Vault::init_vault().await?;
@@ -199,8 +199,8 @@ mod tests {
     async fn add_and_find_account() -> TestResult {
         // Given
         const SLOT: u64 = 198;
-        const VAULT: &str = "/tmp/bifrost/index-2";
-        set_vault_path(VAULT);
+        const VAULT: &str = "/tmp/bifrost/index-3";
+        reset_vault(VAULT)?;
         Vault::init_vault().await?;
         let mut index = Index::load_or_create().await;
         let loc = AccountDiskLocation {
@@ -223,8 +223,8 @@ mod tests {
     async fn save_and_reload() -> TestResult {
         // Given
         const SLOT: u64 = 201;
-        const VAULT: &str = "/tmp/bifrost/index-3";
-        set_vault_path(VAULT);
+        const VAULT: &str = "/tmp/bifrost/index-4";
+        reset_vault(VAULT)?;
         Vault::init_vault().await?;
         let mut index = Index::load_or_create().await;
         let loc = AccountDiskLocation {
@@ -247,10 +247,10 @@ mod tests {
     }
 
     #[test(tokio::test)]
-    async fn cannot_save_if_vault_not_init() {
+    async fn cannot_save_if_vault_not_init() -> TestResult {
         // Given
-        const VAULT: &str = "/tmp/bifrost/index-4";
-        set_vault_path(VAULT);
+        const VAULT: &str = "/tmp/bifrost/index-5";
+        reset_vault(VAULT)?;
         let mut index = Index::load_or_create().await;
         let loc = AccountDiskLocation::default();
         let key = Keypair::generate().pubkey();
@@ -261,15 +261,17 @@ mod tests {
 
         // Then
         assert_matches!(res, Err(Error::FileSystem(err)) if matches!(err.kind(), std::io::ErrorKind::NotFound));
+
+        Ok(())
     }
 
     #[test(tokio::test)]
     async fn load_account() -> TestResult {
         // Given
-        const VAULT: &str = "/tmp/bifrost/index-5";
+        const VAULT: &str = "/tmp/bifrost/index-6";
         const SLOT: u64 = 389;
         const ID: u8 = 5;
-        set_vault_path(VAULT);
+        reset_vault(VAULT)?;
         Vault::init_vault().await?;
         let account = Wallet { prisms: 398_399 };
         let path = get_vault_path()
@@ -300,7 +302,7 @@ mod tests {
     #[test(tokio::test)]
     async fn find_accounts_on_file() -> TestResult {
         // Given
-        const VAULT: &str = "/tmp/bifrost/index-6";
+        const VAULT: &str = "/tmp/bifrost/index-7";
         const SLOT: u64 = 1;
         reset_vault(VAULT)?;
         let mut vault = Vault::load_or_create().await?;
