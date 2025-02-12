@@ -3,7 +3,7 @@
 // Creation date: Saturday 08 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Saturday 08 February 2025 @ 15:28:23
+// Last modified: Wednesday 12 February 2025 @ 22:16:56
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -27,14 +27,15 @@
 // SOFTWARE.
 
 mod error;
-mod instruction;
 mod meta;
 mod onchain;
+mod transaction;
 mod types;
 
 pub use error::Error;
 pub use meta::AccountMeta;
 pub use onchain::wallet::Wallet;
+pub use transaction::TransactionAccount;
 pub use types::Writable;
 
 /// The result for the accounts module.

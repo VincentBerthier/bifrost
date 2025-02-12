@@ -5,6 +5,7 @@ body = """use derive_more::derive::{Display, From};
 
 /// Errors of the $1 module.
 #[derive(Debug, Display, From)]
+#[display(": {_variant}")]
 pub enum Error {}
 
 impl core::error::Error for Error {}"""

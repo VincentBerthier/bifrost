@@ -1,9 +1,9 @@
-// File: src/lib.rs
+// File: src/program/error.rs
 // Project: Bifrost
-// Creation date: Friday 07 February 2025
+// Creation date: Wednesday 12 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Wednesday 12 February 2025 @ 22:12:18
+// Last modified: Wednesday 12 February 2025 @ 22:35:14
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -26,28 +26,23 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-//! The main library crate for the Bifrost blockchain.
+use derive_more::derive::{Display, From};
 
-#![feature(never_type)]
-#![feature(assert_matches)]
-#![feature(coverage_attribute)]
-#![cfg_attr(not(feature = "test"), allow(dead_code, clippy::allow_attributes))]
-#![warn(missing_docs)]
+/// Errors of the programs module.
+#[derive(Debug, Display, From)]
+#[display("while executing a program: {_variant}")]
+pub enum Error {
+    /// There were not enough accounts for the instruction
+    #[display("there were not enough accounts for the instruction")]
+    MissingAccounts,
+    /// The instruction's payload is invalid
+    #[display("payload is invalid for the program: {_0}")]
+    #[from]
+    InvalidPayload(std::io::Error),
+    /// An error happened while trying to access or modify an account.
+    #[display("error while operating on an account: {_0}")]
+    #[from]
+    Account(crate::account::Error),
+}
 
-/// Errors that can happen anywhere in the blockchain.
-mod error;
-
-/// Definition of all things related to the accounts.
-pub mod account;
-/// Definition of all cryptography related operations
-pub mod crypto;
-/// I/O operations
-pub mod io;
-/// Programs embedded in the blockchain.
-pub mod program;
-/// Definition of transaction and base instructions.
-pub mod transaction;
-/// The validator producing blocks from instructions.
-pub mod validator;
-
-pub use error::Error;
+impl core::error::Error for Error {}

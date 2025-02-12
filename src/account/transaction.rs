@@ -4,14 +4,33 @@ use crate::crypto::Pubkey;
 
 use super::{AccountMeta, Error, Result, Wallet};
 
-struct TransactionAccount<'a> {
+/// Stores all data regarding an account needed by an instruction
+/// to allow it to access or modify its data.
+pub struct TransactionAccount<'a> {
+    /// The public key of the account
     pub key: Pubkey,
     readonly: bool,
     prisms: Rc<RefCell<&'a mut u64>>,
 }
 
 impl<'a> TransactionAccount<'a> {
-    fn new(meta: &AccountMeta, account: &'a mut Wallet) -> Self {
+    /// Creates a new `TransactionAccount` to use by a transaction / instruction.
+    ///
+    /// # Parameters
+    /// * `meta` - The metadata related to the account,
+    /// * `accounts` - The actual account data.
+    ///
+    /// # Example
+    /// ```rust
+    /// # use bifrost::{account::{AccountMeta, Wallet, Writable, TransactionAccount}, crypto::Keypair, Error};
+    /// let mut wallet = Wallet { prisms: 1_000 };
+    /// let key = Keypair::generate().pubkey();
+    /// let meta = AccountMeta::wallet(key, Writable::Yes)?;
+    /// let info = TransactionAccount::new(&meta, &mut wallet);
+    ///
+    /// # Ok::<(), Error>(())
+    /// ```
+    pub fn new(meta: &AccountMeta, account: &'a mut Wallet) -> Self {
         Self {
             key: *meta.key(),
             readonly: !meta.is_writable(),
@@ -28,7 +47,15 @@ impl<'a> TransactionAccount<'a> {
         Ok(())
     }
 
-    fn add_prisms(&self, amount: u64) -> Result<()> {
+    /// Adds a given amount of prisms to the account.
+    ///
+    /// # Parameters
+    /// * `amount` - the amount to add to the account,
+    ///
+    /// # Errors
+    /// If there is an arithmetic overflow or if the account
+    /// is read only.
+    pub fn add_prisms(&self, amount: u64) -> Result<()> {
         let res = self
             .prisms
             .borrow()
@@ -38,7 +65,15 @@ impl<'a> TransactionAccount<'a> {
         self.set_prisms(res)
     }
 
-    fn sub_prisms(&self, amount: u64) -> Result<()> {
+    /// Subtracts a given amount of prisms to the account.
+    ///
+    /// # Parameters
+    /// * `amount` - the amount to subtract to the account,
+    ///
+    /// # Errors
+    /// If there is an arithmetic overflow or if the account
+    /// is read only.
+    pub fn sub_prisms(&self, amount: u64) -> Result<()> {
         let res = self
             .prisms
             .borrow()
