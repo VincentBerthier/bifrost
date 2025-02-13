@@ -3,7 +3,7 @@
 // Creation date: Saturday 08 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Sunday 09 February 2025 @ 16:15:10
+// Last modified: Thursday 13 February 2025 @ 10:04:57
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -82,11 +82,18 @@ impl Transaction {
     /// trx.add(&[instruction])?;
     /// # Ok::<(), Error>(())
     /// ```
+    #[instrument(skip_all)]
     pub fn add(&mut self, instructions: &[Instruction]) -> Result<()> {
+        debug!(
+            n = instructions.len(),
+            "adding instructions to the transaction"
+        );
+        trace!("resetting signatures");
+        self.signatures.clear();
         for instr in instructions {
+            trace!("adding transaction");
             self.message.add_instruction(instr)?;
         }
-        self.signatures.clear();
 
         Ok(())
     }
@@ -122,6 +129,7 @@ impl Transaction {
     )]
     #[instrument(skip_all, fields(?key))]
     pub fn sign(&mut self, key: &Keypair) -> Result<()> {
+        debug!("signing transaction");
         let signature = self.get_signature(key)?;
 
         if key.pubkey() == self.message.get_payer().unwrap() {
@@ -132,7 +140,10 @@ impl Transaction {
 
         Ok(())
     }
+
+    #[instrument(skip_all, fields(?key))]
     fn get_signature(&self, key: &Keypair) -> Result<Signature> {
+        debug!("get overall transaction signature");
         if !self.get_signers().contains(&key.pubkey()) {
             warn!("'{}' is not a signer for the transaction", key.pubkey());
             return Err(Error::UnexpectedSigner { key: key.pubkey() });
@@ -188,7 +199,9 @@ impl Transaction {
             .collect::<Vec<_>>()
     }
 
+    #[instrument(skip_all)]
     fn validate_signers(&self, signers: &[Pubkey]) -> Result<()> {
+        debug!("check that there’s a 1 to 1 match between signatures and signers");
         if !signers.iter().all(|signer| {
             self.signatures
                 .iter()

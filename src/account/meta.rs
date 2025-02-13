@@ -3,7 +3,7 @@
 // Creation date: Saturday 08 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Sunday 09 February 2025 @ 16:15:14
+// Last modified: Thursday 13 February 2025 @ 09:59:26
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -27,6 +27,7 @@
 // SOFTWARE.
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use tracing::{debug, instrument, warn};
 
 use crate::crypto::Pubkey;
 
@@ -71,7 +72,9 @@ impl AccountMeta {
     ///
     /// # Ok::<(), Error>(())
     /// ```
+    #[instrument]
     pub fn signing(key: Pubkey, writable: Writable) -> Result<Self> {
+        debug!("creating new signing wallet meta account");
         Self::check_on_curve(&key)?;
         Ok(Self {
             key,
@@ -103,7 +106,9 @@ impl AccountMeta {
     ///
     /// # Ok::<(), Error>(())
     /// ```
+    #[instrument]
     pub fn wallet(key: Pubkey, writable: Writable) -> Result<Self> {
+        debug!("creating new wallet meta account");
         Self::check_on_curve(&key)?;
         Ok(Self {
             key,
@@ -112,7 +117,9 @@ impl AccountMeta {
         })
     }
 
+    #[instrument]
     fn check_on_curve(key: &Pubkey) -> Result<()> {
+        debug!("checking if the key is on the ed25519 curve");
         if !key.is_oncurve() {
             return Err(super::Error::MetaAccountCreation {
                 key: *key,
@@ -145,7 +152,9 @@ impl AccountMeta {
     ///
     /// # Ok::<(), Error>(())
     /// ```
+    #[instrument]
     pub fn program(key: Pubkey) -> Result<Self> {
+        debug!("creating new program meta account");
         if key.is_oncurve() {
             return Err(super::Error::MetaAccountCreation {
                 key,
@@ -183,8 +192,11 @@ impl AccountMeta {
     /// assert!(meta1.is_writable());
     /// # Ok::<(), Error>(())
     /// ```
+    #[instrument]
     pub fn merge(&mut self, other: &Self) -> Result<()> {
+        debug!("merging meta accounts");
         if !self.kind.is_compatible(other.kind) {
+            warn!("attempted to merge non-compatible accounts");
             return Err(Error::MergeIncompatibleAccountTypes(self.kind, other.kind));
         }
 

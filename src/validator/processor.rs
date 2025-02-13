@@ -3,7 +3,7 @@
 // Creation date: Saturday 08 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Sunday 09 February 2025 @ 16:15:10
+// Last modified: Thursday 13 February 2025 @ 09:49:56
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -54,7 +54,9 @@ enum Status {
     Succeeded,
 }
 
+#[instrument]
 async fn update_trx_status(sig: Signature, status: Status) {
+    debug!("setting transaction status");
     TRANSACTIONS_STATUS.lock().await.insert(sig, status);
 }
 

@@ -3,7 +3,7 @@
 // Creation date: Saturday 08 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Sunday 09 February 2025 @ 16:15:10
+// Last modified: Thursday 13 February 2025 @ 10:01:24
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -58,7 +58,9 @@ impl Message {
         }
     }
 
+    #[instrument(skip(self))]
     pub fn get_payer(&self) -> Option<Pubkey> {
+        debug!("getting transaction payer account");
         self.accounts
             .iter()
             .find(|acc| acc.is_signing())
@@ -67,12 +69,14 @@ impl Message {
 
     #[instrument(skip_all)]
     pub fn add_instruction(&mut self, instruction: &Instruction) -> Result<()> {
+        debug!("adding instruction to the message");
         let compiled = self.compile_instruction(instruction)?;
         self.instructions.push(compiled);
 
         Ok(())
     }
 
+    #[instrument(skip_all)]
     fn compile_instruction(&mut self, instruction: &Instruction) -> Result<CompiledInstruction> {
         debug!("compile instruction");
         let mut compiled_accounts = Vec::new();
@@ -90,6 +94,7 @@ impl Message {
         ))
     }
 
+    #[instrument(skip_all)]
     fn find_or_add_account(&mut self, account: &AccountMeta) -> Result<u8> {
         if let Some(idx) = self.find_account(account.key()) {
             trace!("account was found in position {idx} of the transaction accounts");

@@ -43,6 +43,9 @@ pub enum Error {
     #[display("error while operating on an account: {_0}")]
     #[from]
     Account(crate::account::Error),
+    /// Custom error form programs.
+    #[display("custom program error: {_0}")]
+    Custom(String),
 }
 
 impl core::error::Error for Error {}

@@ -3,7 +3,7 @@
 // Creation date: Sunday 09 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Tuesday 11 February 2025 @ 11:50:48
+// Last modified: Thursday 13 February 2025 @ 09:56:27
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -29,7 +29,7 @@
 use std::{path::PathBuf, sync::OnceLock};
 
 use tokio::fs::remove_file;
-use tracing::{debug, instrument};
+use tracing::{debug, instrument, trace};
 
 use crate::{account::Wallet, crypto::Pubkey};
 
@@ -72,7 +72,9 @@ impl Vault {
     /// Only if the vault could not be initialized,
     /// which would only happen because of a file system error
     /// such as a permission issue.
+    #[instrument]
     pub async fn load_or_create() -> Result<Self> {
+        debug!("initializing vault");
         Self::init_vault().await?;
         Ok(Self {
             index: Index::load_or_create().await,
@@ -108,7 +110,9 @@ impl Vault {
     ///
     /// # Errors
     /// If the index failed to load an existing account.
+    #[instrument(skip(self))]
     pub async fn get(&self, key: &Pubkey) -> Result<Wallet> {
+        debug!("getting account");
         Ok((self.index.load(key).await?).unwrap_or_default())
     }
 
@@ -123,8 +127,14 @@ impl Vault {
     ///
     /// # Errors
     /// Only if there was a problem saving the account on the disk.
+    #[instrument(skip(self, account))]
     pub async fn save_account(&mut self, key: Pubkey, account: &Wallet, slot: u64) -> Result<()> {
+        debug!("saving account");
         if let Some(&old_loc) = self.index.find(&key) {
+            trace!(
+                ?old_loc,
+                "account was already known, placing its old location into the trash"
+            );
             self.trash.insert(old_loc)?;
         }
 
@@ -138,7 +148,9 @@ impl Vault {
     ///
     /// # Errors
     /// Only if there was a problem saving the vault on the disk.
+    #[instrument(skip(self))]
     pub async fn save(&self) -> Result<()> {
+        debug!("saving vault");
         self.index.save().await?;
         self.trash.save().await
     }
@@ -154,26 +166,36 @@ impl Vault {
     ///
     /// # Parameters
     /// * `current_slot` - The current slot the blockchain is working on.
+    #[instrument(skip(self))]
     pub async fn cleanup(&mut self, current_slot: u64) -> Result<()> {
+        debug!("cleaning up the vault");
         let to_clean = self.trash.get_files_to_clean().await;
         for file in to_clean {
+            trace!(?file, "cleaning up the file");
             let AccountFile { slot, id } = file;
             if slot == current_slot {
+                trace!(?file, "file is for the current slot, skipping");
                 continue;
             }
             self.relocate_accounts(slot, id).await?;
+            trace!(?file, "removing file from the disk");
             remove_file(AccountDiskLocation::get_path(slot, id)).await?;
+            trace!(?file, "removing file from the trash");
             self.trash.remove(&file);
         }
         Ok(())
     }
 
+    #[instrument(skip(self))]
     async fn relocate_accounts(&mut self, slot: u64, id: u8) -> Result<()> {
+        debug!("relocating accounts");
         let relocated_accounts = self.index.accounts_on_file(slot, id);
         for key in relocated_accounts {
+            trace!(%key, "relocating account");
             #[expect(clippy::unwrap_used, reason = "the list was retrieved just before")]
             let account = self.index.load(&key).await?.unwrap();
             let new_loc = AccountDiskLocation::new_from_write(&account, slot).await?;
+            trace!(%key, ?new_loc, "relocated to new location");
             self.index.set_account(key, new_loc);
         }
         Ok(())

@@ -1,4 +1,34 @@
+// File: src/account/transaction.rs
+// Project: Bifrost
+// Creation date: Thursday 13 February 2025
+// Author: Vincent Berthier <vincent.berthier@posteo.org>
+// -----
+// Last modified: Thursday 13 February 2025 @ 09:45:33
+// Modified by: Vincent Berthier
+// -----
+// Copyright (c) 2025 <Vincent Berthier>
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the 'Software'), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED 'AS IS', WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
 use std::{cell::RefCell, rc::Rc};
+
+use tracing::{debug, instrument};
 
 use crate::crypto::Pubkey;
 
@@ -9,7 +39,10 @@ use super::{AccountMeta, Error, Result, Wallet};
 pub struct TransactionAccount<'a> {
     /// The public key of the account
     pub key: Pubkey,
-    readonly: bool,
+    /// Is the account writable or read only.
+    pub readonly: bool,
+    /// Is the account signing the transaction or not.
+    pub is_signer: bool,
     prisms: Rc<RefCell<&'a mut u64>>,
 }
 
@@ -30,15 +63,23 @@ impl<'a> TransactionAccount<'a> {
     ///
     /// # Ok::<(), Error>(())
     /// ```
+    #[instrument(skip_all)]
     pub fn new(meta: &AccountMeta, account: &'a mut Wallet) -> Self {
+        debug!("creating new TransactionAccount for {}", meta.key());
         Self {
             key: *meta.key(),
             readonly: !meta.is_writable(),
+            is_signer: meta.is_signing(),
             prisms: Rc::new(RefCell::new(&mut account.prisms)),
         }
     }
 
+    #[instrument(skip(self))]
     fn set_prisms(&self, amount: u64) -> Result<()> {
+        debug!(
+            "setting prisms to {amount} (from {})",
+            *self.prisms.borrow()
+        );
         if self.readonly {
             return Err(Error::ModificationOfReadOnlyAccount { key: self.key });
         }
@@ -55,7 +96,9 @@ impl<'a> TransactionAccount<'a> {
     /// # Errors
     /// If there is an arithmetic overflow or if the account
     /// is read only.
+    #[instrument(skip(self))]
     pub fn add_prisms(&self, amount: u64) -> Result<()> {
+        debug!("adding {amount} prisms");
         let res = self
             .prisms
             .borrow()
@@ -73,7 +116,9 @@ impl<'a> TransactionAccount<'a> {
     /// # Errors
     /// If there is an arithmetic overflow or if the account
     /// is read only.
+    #[instrument(skip(self))]
     pub fn sub_prisms(&self, amount: u64) -> Result<()> {
+        debug!("subtracting {amount} prisms");
         let res = self
             .prisms
             .borrow()

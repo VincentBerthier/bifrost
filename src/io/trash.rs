@@ -3,7 +3,7 @@
 // Creation date: Monday 10 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Tuesday 11 February 2025 @ 11:26:37
+// Last modified: Thursday 13 February 2025 @ 09:51:51
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -98,6 +98,7 @@ pub struct Trash {
 }
 
 impl Trash {
+    #[instrument]
     pub async fn load_or_create() -> Self {
         debug!("initializing trash");
         if let Ok(trash) = Self::load_from_disk().await {
@@ -120,7 +121,9 @@ impl Trash {
         read_from_file(trash_path).await
     }
 
+    #[instrument(skip(self))]
     pub fn insert(&mut self, loc: AccountDiskLocation) -> Result<()> {
+        debug!("adding location to the trash");
         let entry = self.trash.entry(AccountFile::from_loc(loc)).or_default();
         let file_loc = Loc::from_loc(loc);
 
@@ -132,7 +135,9 @@ impl Trash {
         Ok(())
     }
 
+    #[instrument(skip(self))]
     pub fn remove(&mut self, file: &AccountFile) {
+        debug!("removing location from the trash");
         self.trash.remove(file);
     }
 
