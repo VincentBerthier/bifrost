@@ -199,6 +199,12 @@ impl Transaction {
             .collect::<Vec<_>>()
     }
 
+    /// Get the message for the transaction.
+    #[must_use]
+    pub const fn message(&self) -> &Message {
+        &self.message
+    }
+
     #[instrument(skip_all)]
     fn validate_signers(&self, signers: &[Pubkey]) -> Result<()> {
         debug!("check that there’s a 1 to 1 match between signatures and signers");

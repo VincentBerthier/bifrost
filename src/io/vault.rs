@@ -43,6 +43,13 @@ use super::{
 
 pub static VAULT_PATH: OnceLock<PathBuf> = OnceLock::new();
 
+/// Sets the path where the vault will be stored on disk.
+///
+/// # Parameters
+/// * `path` - Path to the on-disk vault.
+///
+/// # Errors
+/// if the vault can not be created on the given path.
 #[mutants::skip]
 #[expect(clippy::unwrap_used)]
 pub fn set_vault_path<P>(path: P)

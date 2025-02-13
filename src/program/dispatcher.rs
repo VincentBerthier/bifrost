@@ -1,20 +1,28 @@
 use tracing::{debug, instrument};
 
-use crate::{account::Accounts, transaction::Instruction};
+use crate::{account::TransactionAccount, crypto::Pubkey};
 
 use super::{
     system::{self, SYSTEM_PROGRAM},
     Error, Result,
 };
 
+/// Dispatches an instruction to the program handling it.
+///
+/// # Parameters
+/// * `instruction` - The instruction to execute,
+/// * `accounts` - The accounts referenced by the instruction.
+///
+/// # Errors
+/// If the program is unknown or failed to run.
 #[instrument(skip_all)]
-fn dispatch<'a>(instruction: &Instruction, accounts: &'a Accounts<'a>) -> Result<()> {
+pub fn dispatch(program: &Pubkey, accounts: &[TransactionAccount], payload: &[u8]) -> Result<()> {
     debug!(
-        program = %instruction.program(),
+        %program,
         "received new instruction to handle"
     );
-    match *instruction.program() {
-        SYSTEM_PROGRAM => system::execute_instruction(accounts, instruction.data()),
+    match *program {
+        SYSTEM_PROGRAM => system::execute_instruction(accounts, payload),
         key => Err(Error::UnknownProgram { key }),
     }
 }
@@ -27,9 +35,10 @@ mod tests {
 
     use test_log::test;
 
-    use crate::account::{AccountMeta, Accounts, TransactionAccount, Wallet, Writable};
+    use crate::account::{AccountMeta, TransactionAccount, Wallet, Writable};
     use crate::crypto::Keypair;
     use crate::program::system;
+    use crate::transaction::Instruction;
 
     // use super::super::Error;
     use super::*;
@@ -50,12 +59,11 @@ mod tests {
             TransactionAccount::new(&meta1, &mut wallet1),
             TransactionAccount::new(&meta2, &mut wallet2),
         ];
-        let accounts = Accounts::new(accounts_vec.as_slice());
 
         let instruction = system::instruction::transfer(key1, key2, AMOUNT)?;
 
         // When
-        dispatch(&instruction, &accounts)?;
+        dispatch(&SYSTEM_PROGRAM, &accounts_vec, instruction.data())?;
 
         // Then
         assert_eq!(wallet1.prisms, 0);
@@ -80,12 +88,11 @@ mod tests {
             TransactionAccount::new(&meta1, &mut wallet1),
             TransactionAccount::new(&meta2, &mut wallet2),
         ];
-        let accounts = Accounts::new(accounts_vec.as_slice());
 
         let instruction = Instruction::new(program, [meta1, meta2], &Vec::<u8>::new());
 
         // When
-        let res = dispatch(&instruction, &accounts);
+        let res = dispatch(&program, &accounts_vec, instruction.data());
 
         // Then
         assert_matches!(res, Err(err) if matches!(err, Error::UnknownProgram { key } if key == program));

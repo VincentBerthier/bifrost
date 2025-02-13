@@ -36,7 +36,7 @@ mod vault;
 pub use error::Error;
 type Result<T> = core::result::Result<T, Error>;
 
-pub use vault::Vault;
+pub use vault::{set_vault_path, Vault};
 
 /// Maximum size for an account file.
 #[cfg(test)]

@@ -29,14 +29,17 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use tracing::{debug, instrument};
 
-use crate::{account::Accounts, crypto::Pubkey};
+use crate::{
+    account::{next_account, TransactionAccount},
+    crypto::Pubkey,
+};
 
 use super::{Error, Result};
 
 /// The System's program id (`BifrostSystemProgram111111111111111111111111`)
 pub const SYSTEM_PROGRAM: Pubkey = Pubkey::from_bytes(&[
-    159, 65, 158, 196, 5, 83, 96, 13, 242, 56, 2, 138, 167, 225, 20, 157, 169, 199, 82, 249, 248,
-    91, 220, 170, 46, 53, 235, 98, 98, 0, 0, 0,
+    2, 190, 236, 171, 26, 147, 23, 185, 158, 168, 176, 152, 117, 167, 48, 232, 60, 78, 120, 154,
+    96, 248, 193, 153, 0, 203, 246, 209, 37, 0, 0, 0,
 ]);
 
 #[derive(Debug, BorshSerialize, BorshDeserialize)]
@@ -53,7 +56,10 @@ enum SystemInstruction {
 /// # Errors
 /// if the instruction fails to complete (missing accounts, arithmetic overflows, *etc.*).
 #[instrument(skip_all)]
-pub fn execute_instruction<'a>(accounts: &'a Accounts<'a>, payload: &[u8]) -> Result<()> {
+pub fn execute_instruction<'a, 'b>(
+    accounts: &'a [TransactionAccount<'b>],
+    payload: &[u8],
+) -> Result<()> {
     debug!("received system insruction");
     match borsh::from_slice(payload)? {
         SystemInstruction::Transfer(amount) => transfer(accounts, amount),
@@ -61,16 +67,17 @@ pub fn execute_instruction<'a>(accounts: &'a Accounts<'a>, payload: &[u8]) -> Re
 }
 
 #[instrument(skip(accounts))]
-fn transfer<'a>(accounts: &'a Accounts<'a>, amount: u64) -> Result<()> {
+fn transfer<'a, 'b>(accounts: &'a [TransactionAccount<'b>], amount: u64) -> Result<()> {
     debug!("transferring prisms");
-    let payer = accounts.next()?;
+    let mut accounts_iter = accounts.iter();
+    let payer = next_account(&mut accounts_iter)?;
+    let receiver = next_account(&mut accounts_iter)?;
     if !payer.is_signer {
         return Err(Error::Custom(format!(
             "{} must be a signing account",
             payer.key
         )));
     }
-    let receiver = accounts.next()?;
     debug!("from {} to {}", payer.key, receiver.key);
     payer.sub_prisms(amount)?;
     receiver.add_prisms(amount)?;
@@ -140,12 +147,11 @@ mod tests {
             TransactionAccount::new(&meta1, &mut wallet1),
             TransactionAccount::new(&meta2, &mut wallet2),
         ];
-        let accounts = Accounts::new(accounts_vec.as_slice());
 
         let payload = borsh::to_vec(&SystemInstruction::Transfer(100)).unwrap();
 
         // When
-        execute_instruction(&accounts, &payload)?;
+        execute_instruction(&accounts_vec, &payload)?;
 
         // Then
         assert_eq!(wallet1.prisms, AMOUNT - 100);
@@ -163,13 +169,12 @@ mod tests {
         let mut wallet1 = Wallet { prisms: AMOUNT };
 
         let accounts_vec = vec![TransactionAccount::new(&meta1, &mut wallet1)];
-        let accounts = Accounts::new(accounts_vec.as_slice());
 
         #[expect(clippy::unwrap_used)]
         let payload = borsh::to_vec(&SystemInstruction::Transfer(100)).unwrap();
 
         // When
-        let res = execute_instruction(&accounts, &payload);
+        let res = execute_instruction(&accounts_vec, &payload);
 
         // Then
         assert_matches!(res, Err(error) if matches!(error, Error::Account(_)));
@@ -192,13 +197,12 @@ mod tests {
             TransactionAccount::new(&meta1, &mut wallet1),
             TransactionAccount::new(&meta2, &mut wallet2),
         ];
-        let accounts = Accounts::new(accounts_vec.as_slice());
 
         #[expect(clippy::unwrap_used)]
         let payload = borsh::to_vec(&SystemInstruction::Transfer(100)).unwrap();
 
         // When
-        let res = execute_instruction(&accounts, &payload);
+        let res = execute_instruction(&accounts_vec, &payload);
 
         // Then
         assert_matches!(res, Err(error) if matches!(error, Error::Custom { .. }));

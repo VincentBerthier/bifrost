@@ -44,9 +44,9 @@ pub struct Message {
     /// Slot at which the transaction was created
     slot: u64,
     /// The instruction of a transaction.
-    instructions: Vec<CompiledInstruction>,
+    pub instructions: Vec<CompiledInstruction>,
     /// List of accounts referenced by the transaction's instructions.
-    accounts: Vec<AccountMeta>,
+    pub accounts: Vec<AccountMeta>,
 }
 
 impl Message {

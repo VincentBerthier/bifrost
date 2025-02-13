@@ -32,7 +32,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use memmap2::MmapOptions;
 use tokio::{
     fs::{self, File, OpenOptions},
-    io::AsyncWriteExt as _,
+    io::AsyncWriteExt,
     sync::Semaphore,
 };
 use tracing::{debug, instrument, trace};
@@ -105,7 +105,9 @@ where
         .truncate(true)
         .open(path.into())
         .await?;
-    Ok(file.write_all(&data).await?)
+    file.write_all(&data).await?;
+    file.flush().await?;
+    Ok(())
 }
 
 #[expect(clippy::unwrap_used)]
@@ -125,6 +127,7 @@ where
     let _guard = SEMAPHORE.acquire().await?;
     let offset = file.metadata().await?.len();
     file.write_all(&data).await?;
+    file.flush().await?;
     Ok((data.len() as u64, offset))
 }
 

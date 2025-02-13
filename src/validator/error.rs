@@ -35,6 +35,15 @@ pub enum Error {
     /// The transaction's signatures are missing or do not match the expectation.
     #[display("the transaction’s signatures are invalid")]
     InvalidTransactionSignatures,
+    /// When the lock on the vault could not be obtained.
+    #[display("the lock on the vault could not be obtained")]
+    VaultLock,
+    /// An error occurred in the vault
+    #[from]
+    Io(crate::io::Error),
+    /// An error occurred while running a program.
+    #[from]
+    Program(crate::program::Error),
 }
 
 impl core::error::Error for Error {}

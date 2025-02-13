@@ -66,11 +66,14 @@ impl Index {
         read_from_file(index_path).await
     }
 
+    #[instrument(skip(self))]
     pub async fn load(&self, key: &Pubkey) -> Result<Option<Wallet>> {
         let Some(loc) = self.find(key) else {
+            trace!("account was not found in the index");
             return Ok(None);
         };
 
+        trace!("account was found, reading it from the disk");
         Some(loc.read().await).transpose()
     }
 

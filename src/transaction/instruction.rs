@@ -30,11 +30,15 @@ use borsh::{BorshDeserialize, BorshSerialize};
 
 use crate::{account::AccountMeta, crypto::Pubkey};
 
+/// An instruction compiled and ready to be executed on the blockchain.
 #[derive(Clone, Debug, Default, BorshSerialize, BorshDeserialize)]
 pub struct CompiledInstruction {
-    program_account_id: u8,
-    data: Vec<u8>,
-    accounts: Vec<u8>,
+    /// The id in the message's accounts of the program executing this instruction.
+    pub program_account_id: u8,
+    /// The payload for the instruction.
+    pub data: Vec<u8>,
+    /// The id in the message's accounts of the accounts referenced by the instruction.
+    pub accounts: Vec<u8>,
 }
 
 /// An instruction to execute on the blockchain.
@@ -110,6 +114,13 @@ impl Instruction {
 }
 
 impl CompiledInstruction {
+    /// Creates a new compiled instruction.
+    ///
+    /// # Parameters
+    /// * `program_account_id` - The id of the program in the [`Message`]'s accounts.
+    /// * `data` - The instruction's payload,
+    /// * `accounts` - The id of the accounts referenced by the instruction in the [`Message`]'s accounts.
+    #[must_use]
     pub const fn new(program_account_id: u8, data: Vec<u8>, accounts: Vec<u8>) -> Self {
         Self {
             program_account_id,
