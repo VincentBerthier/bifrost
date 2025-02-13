@@ -128,6 +128,61 @@ impl<'a> TransactionAccount<'a> {
     }
 }
 
+/// List of accounts use in an instruction.
+pub struct Accounts<'a> {
+    accounts: &'a [TransactionAccount<'a>],
+    current: RefCell<usize>,
+}
+
+impl<'a> Accounts<'a> {
+    /// Program utility to access the instruction's accounts.
+    ///
+    /// # Parameters
+    /// * `accounts` - the accounts in an instruction,
+    ///
+    /// # Example
+    /// ```rust
+    /// # use bifrost::Error;
+    /// # use bifrost::{crypto::Keypair, account::{Writable, Wallet, AccountMeta, TransactionAccount, Accounts}};
+    /// let key1 = Keypair::generate().pubkey();
+    /// let key2 = Keypair::generate().pubkey();
+    /// let meta1 = AccountMeta::signing(key1, Writable::Yes)?;
+    /// let meta2 = AccountMeta::wallet(key2, Writable::Yes)?;
+    /// let mut wallet1 = Wallet { prisms: 1_000 };
+    /// let mut wallet2 = Wallet { prisms: 0 };
+    ///
+    /// let accounts_vec = vec![
+    ///     TransactionAccount::new(&meta1, &mut wallet1),
+    ///     TransactionAccount::new(&meta2, &mut wallet2),
+    /// ];
+    /// let accounts = Accounts::new(accounts_vec.as_slice());
+    /// # Ok::<(), Error>(())
+    /// ```
+    #[must_use]
+    pub const fn new(accounts: &'a [TransactionAccount<'a>]) -> Self {
+        Self {
+            accounts,
+            current: RefCell::new(0),
+        }
+    }
+
+    /// Get the next account in the list.
+    ///
+    /// # Errors
+    /// If there are no next account.
+    #[must_use]
+    #[instrument(skip(self), fields(current = *self.current.borrow(), len = self.accounts.len()))]
+    pub fn next(&self) -> Result<&'a TransactionAccount> {
+        debug!("getting account");
+        let res = self
+            .accounts
+            .get(*self.current.borrow())
+            .ok_or(Error::MissingAccounts)?;
+        *self.current.borrow_mut() += 1;
+        Ok(res)
+    }
+}
+
 #[cfg(test)]
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {

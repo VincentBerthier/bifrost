@@ -26,53 +26,34 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use std::cell::RefCell;
-
 use borsh::{BorshDeserialize, BorshSerialize};
 use tracing::{debug, instrument};
 
-use crate::{account::TransactionAccount, crypto::Pubkey};
+use crate::{account::Accounts, crypto::Pubkey};
 
 use super::{Error, Result};
 
-// BifrostSystemProgram111111111111111111111111
-const SYSTEM_PROGRAM: Pubkey = Pubkey::from_bytes(&[
+/// The System's program id (`BifrostSystemProgram111111111111111111111111`)
+pub const SYSTEM_PROGRAM: Pubkey = Pubkey::from_bytes(&[
     159, 65, 158, 196, 5, 83, 96, 13, 242, 56, 2, 138, 167, 225, 20, 157, 169, 199, 82, 249, 248,
     91, 220, 170, 46, 53, 235, 98, 98, 0, 0, 0,
 ]);
-
-struct Accounts<'a> {
-    accounts: &'a [TransactionAccount<'a>],
-    current: RefCell<usize>,
-}
-
-impl<'a> Accounts<'a> {
-    const fn new(accounts: &'a [TransactionAccount<'a>]) -> Self {
-        Self {
-            accounts,
-            current: RefCell::new(0),
-        }
-    }
-
-    #[instrument(skip(self), fields(current = *self.current.borrow(), len = self.accounts.len()))]
-    fn next(&self) -> Result<&'a TransactionAccount> {
-        debug!("getting account");
-        let res = self
-            .accounts
-            .get(*self.current.borrow())
-            .ok_or(Error::MissingAccounts)?;
-        *self.current.borrow_mut() += 1;
-        Ok(res)
-    }
-}
 
 #[derive(Debug, BorshSerialize, BorshDeserialize)]
 enum SystemInstruction {
     Transfer(u64),
 }
 
+/// Executes a system program's instruction.
+///
+/// # Parameters
+/// * `accounts` - The accounts needed by the instruction,
+/// * `payload` - The data payload for the instruction.
+///
+/// # Errors
+/// if the instruction fails to complete (missing accounts, arithmetic overflows, *etc.*).
 #[instrument(skip_all)]
-fn execute_instruction<'a>(accounts: &'a Accounts<'a>, payload: &[u8]) -> Result<()> {
+pub fn execute_instruction<'a>(accounts: &'a Accounts<'a>, payload: &[u8]) -> Result<()> {
     debug!("received system insruction");
     match borsh::from_slice(payload)? {
         SystemInstruction::Transfer(amount) => transfer(accounts, amount),
@@ -94,6 +75,38 @@ fn transfer<'a>(accounts: &'a Accounts<'a>, amount: u64) -> Result<()> {
     payer.sub_prisms(amount)?;
     receiver.add_prisms(amount)?;
     Ok(())
+}
+
+/// Get the instructions for the system program.
+pub mod instruction {
+    use crate::{
+        account::{AccountMeta, Writable},
+        crypto::Pubkey,
+        transaction::Instruction,
+    };
+
+    use super::{Result, SystemInstruction, SYSTEM_PROGRAM};
+
+    /// Prisms transfer instruction.
+    ///
+    /// # Parameters
+    /// * `from` - The account the prisms are taken from,
+    /// * `to` - The account receiving the prisms,
+    /// * `amount` - The amount of prisms to receive.
+    ///
+    /// # Errors
+    /// If either account is not on the `ed25519` curve.
+    pub fn transfer(from: Pubkey, to: Pubkey, amount: u64) -> Result<Instruction> {
+        let accounts = vec![
+            AccountMeta::signing(from, Writable::Yes)?,
+            AccountMeta::wallet(to, Writable::Yes)?,
+        ];
+        Ok(Instruction::new(
+            SYSTEM_PROGRAM,
+            accounts,
+            &SystemInstruction::Transfer(amount),
+        ))
+    }
 }
 
 #[cfg(test)]
@@ -159,7 +172,7 @@ mod tests {
         let res = execute_instruction(&accounts, &payload);
 
         // Then
-        assert_matches!(res, Err(error) if matches!(error, Error::MissingAccounts));
+        assert_matches!(res, Err(error) if matches!(error, Error::Account(_)));
 
         Ok(())
     }

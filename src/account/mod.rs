@@ -35,7 +35,7 @@ mod types;
 pub use error::Error;
 pub use meta::AccountMeta;
 pub use onchain::wallet::Wallet;
-pub use transaction::TransactionAccount;
+pub use transaction::{Accounts, TransactionAccount};
 pub use types::Writable;
 
 /// The result for the accounts module.

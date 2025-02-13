@@ -50,6 +50,9 @@ pub enum Error {
     /// Tried to merge accounts  of different types
     #[display("tried to merge accounts of different types ({:?}, {:?})", _0, _1)]
     MergeIncompatibleAccountTypes(AccountType, AccountType),
+    /// There were not enough accounts for the instruction
+    #[display("there were not enough accounts for the instruction")]
+    MissingAccounts,
     /// Tried to modify a read only account
     #[display("account '{key}' is read-only but there was an attempt to modify it")]
     ModificationOfReadOnlyAccount {

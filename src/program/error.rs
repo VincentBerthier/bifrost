@@ -28,17 +28,22 @@
 
 use derive_more::derive::{Display, From};
 
+use crate::crypto::Pubkey;
+
 /// Errors of the programs module.
 #[derive(Debug, Display, From)]
 #[display("while executing a program: {_variant}")]
 pub enum Error {
-    /// There were not enough accounts for the instruction
-    #[display("there were not enough accounts for the instruction")]
-    MissingAccounts,
     /// The instruction's payload is invalid
     #[display("payload is invalid for the program: {_0}")]
     #[from]
     InvalidPayload(std::io::Error),
+    /// Tried to execute an instruction on an unknown program.
+    #[display("'{key}' is not a known program")]
+    UnknownProgram {
+        /// The key of the unknown program
+        key: Pubkey,
+    },
     /// An error happened while trying to access or modify an account.
     #[display("error while operating on an account: {_0}")]
     #[from]
