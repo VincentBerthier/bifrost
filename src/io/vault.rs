@@ -3,7 +3,7 @@
 // Creation date: Sunday 09 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Thursday 13 February 2025 @ 09:56:27
+// Last modified: Saturday 15 February 2025 @ 17:56:10
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -26,16 +26,16 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use std::{path::PathBuf, sync::OnceLock};
+use std::{collections::HashMap, path::PathBuf, sync::OnceLock};
 
 use tokio::fs::remove_file;
 use tracing::{debug, instrument, trace};
 
-use crate::{account::Wallet, crypto::Pubkey};
+use crate::{account::Wallet, crypto::Pubkey, io::location::get_account_path};
 
 use super::{
     index::Index,
-    location::AccountDiskLocation,
+    location::SlotWriter,
     support::create_folder,
     trash::{AccountFile, Trash},
     Result,
@@ -70,6 +70,10 @@ pub struct Vault {
     index: Index,
     /// The list of out-of-date accounts stored on the disk.
     trash: Trash,
+    /// The account writer
+    writer: SlotWriter,
+    /// Account cache
+    cache: HashMap<Pubkey, Wallet>,
 }
 
 impl Vault {
@@ -86,6 +90,8 @@ impl Vault {
         Ok(Self {
             index: Index::load_or_create().await,
             trash: Trash::load_or_create().await,
+            writer: SlotWriter::new(0),
+            cache: HashMap::new(),
         })
     }
 
@@ -120,7 +126,14 @@ impl Vault {
     #[instrument(skip(self))]
     pub async fn get(&self, key: &Pubkey) -> Result<Wallet> {
         debug!("getting account");
-        Ok((self.index.load(key).await?).unwrap_or_default())
+        let res = match self.cache.get(key) {
+            Some(&account) => {
+                trace!("account found in the cache");
+                account
+            }
+            None => (self.index.load(key).await?).unwrap_or_default(),
+        };
+        Ok(res)
     }
 
     // TODO: will need to handle saving the same account multiple times for the same slot
@@ -145,7 +158,12 @@ impl Vault {
             self.trash.insert(old_loc)?;
         }
 
-        let loc = AccountDiskLocation::new_from_write(account, slot).await?;
+        if self.writer.slot() != slot {
+            self.writer = SlotWriter::new(slot);
+            self.cache.clear();
+        }
+        self.cache.insert(key, *account);
+        let loc = self.writer.append(account).await?;
         self.index.set_account(key, loc);
 
         Ok(())
@@ -156,8 +174,9 @@ impl Vault {
     /// # Errors
     /// Only if there was a problem saving the vault on the disk.
     #[instrument(skip(self))]
-    pub async fn save(&self) -> Result<()> {
+    pub async fn save(&mut self) -> Result<()> {
         debug!("saving vault");
+        self.writer.flush().await?;
         self.index.save().await?;
         self.trash.save().await
     }
@@ -176,7 +195,9 @@ impl Vault {
     #[instrument(skip(self))]
     pub async fn cleanup(&mut self, current_slot: u64) -> Result<()> {
         debug!("cleaning up the vault");
-        let to_clean = self.trash.get_files_to_clean().await;
+        let mut to_clean = self.trash.get_files_to_clean().await;
+        to_clean.sort();
+        let mut writer = SlotWriter::new(0);
         for file in to_clean {
             trace!(?file, "cleaning up the file");
             let AccountFile { slot, id } = file;
@@ -184,24 +205,32 @@ impl Vault {
                 trace!(?file, "file is for the current slot, skipping");
                 continue;
             }
-            self.relocate_accounts(slot, id).await?;
+            if slot != writer.slot() {
+                writer = SlotWriter::new(slot);
+            }
+            self.relocate_accounts(&mut writer, slot, id).await?;
             trace!(?file, "removing file from the disk");
-            remove_file(AccountDiskLocation::get_path(slot, id)).await?;
+            remove_file(get_account_path(slot, id)).await?;
             trace!(?file, "removing file from the trash");
             self.trash.remove(&file);
         }
         Ok(())
     }
 
-    #[instrument(skip(self))]
-    async fn relocate_accounts(&mut self, slot: u64, id: u8) -> Result<()> {
+    #[instrument(skip(self, writer))]
+    async fn relocate_accounts(
+        &mut self,
+        writer: &mut SlotWriter,
+        slot: u64,
+        id: u8,
+    ) -> Result<()> {
         debug!("relocating accounts");
         let relocated_accounts = self.index.accounts_on_file(slot, id);
         for key in relocated_accounts {
             trace!(%key, "relocating account");
             #[expect(clippy::unwrap_used, reason = "the list was retrieved just before")]
             let account = self.index.load(&key).await?.unwrap();
-            let new_loc = AccountDiskLocation::new_from_write(&account, slot).await?;
+            let new_loc = writer.append(account).await?;
             trace!(%key, ?new_loc, "relocated to new location");
             self.index.set_account(key, new_loc);
         }
@@ -215,13 +244,14 @@ mod tests {
 
     use std::assert_matches::assert_matches;
     use std::fs::{read_dir, remove_dir_all};
+    use std::time::Duration;
 
     use test_log::test;
+    use tokio::time::sleep;
 
     use crate::account::Wallet;
     use crate::crypto::{Keypair, Pubkey};
     use crate::io::index::Index;
-    use crate::io::location::AccountDiskLocation;
     use crate::io::support::read_from_file;
     use crate::io::MAX_ACCOUNT_FILE_SIZE;
 
@@ -261,9 +291,12 @@ mod tests {
         let wallet3 = Wallet { prisms: AMOUNT3 };
 
         let mut index = Index::load_or_create().await;
-        let loc1 = AccountDiskLocation::new_from_write(&wallet1, 82).await?;
-        let loc2 = AccountDiskLocation::new_from_write(&wallet2, 82).await?;
-        let loc3 = AccountDiskLocation::new_from_write(&wallet3, 82).await?;
+        let mut writer = SlotWriter::new(82);
+        let loc1 = writer.append(&wallet1).await?;
+        let loc2 = writer.append(&wallet2).await?;
+        let loc3 = writer.append(&wallet3).await?;
+        drop(writer);
+        sleep(Duration::from_millis(2)).await;
 
         index.set_account(key1, loc1);
         index.set_account(key2, loc2);
@@ -317,6 +350,8 @@ mod tests {
         // When
         account.prisms = 198_388;
         vault.save_account(key, &account, 0).await?;
+        drop(vault);
+        sleep(Duration::from_millis(2)).await;
 
         // Then
         let from_disk: Wallet =
@@ -346,13 +381,16 @@ mod tests {
         }
 
         // When
-        assert!(!get_vault_path().join("accounts").join("0.1").exists());
         vault
             .save_account(Keypair::generate().pubkey(), &account, 0)
             .await?;
+        drop(vault);
+        sleep(Duration::from_millis(2)).await;
 
         // Then
-        assert!(get_vault_path().join("accounts").join("0.1").exists());
+        let path = get_vault_path().join("accounts").join("0.1");
+        assert!(path.exists());
+        assert_eq!(path.metadata()?.len(), data_len);
 
         Ok(())
     }
@@ -427,6 +465,7 @@ mod tests {
 
         // When
         vault.cleanup(5).await?;
+        sleep(Duration::from_millis(2)).await;
 
         // Then
         assert_eq!(read_dir(get_vault_path().join("accounts"))?.count(), 8);
@@ -460,6 +499,7 @@ mod tests {
         // When
         vault.cleanup(5).await?;
         vault.cleanup(5).await?;
+        sleep(Duration::from_millis(2)).await;
 
         // Then
         assert_eq!(read_dir(get_vault_path().join("accounts"))?.count(), 8);
@@ -492,6 +532,8 @@ mod tests {
 
         // When
         vault.cleanup(3).await?;
+        drop(vault);
+        sleep(Duration::from_millis(2)).await;
 
         // Then
         assert_eq!(read_dir(get_vault_path().join("accounts"))?.count(), 10);

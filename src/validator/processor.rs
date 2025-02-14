@@ -26,10 +26,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use std::{
-    sync::{Arc, LazyLock, OnceLock},
-    time::Duration,
-};
+use std::sync::{Arc, LazyLock};
 
 use async_channel::{unbounded, Receiver, Sender};
 use tokio::{
@@ -37,9 +34,8 @@ use tokio::{
     sync::{
         mpsc::{channel, Receiver as TReceiver, Sender as TSender},
         oneshot::Receiver as OReceiver,
-        Mutex,
+        RwLock,
     },
-    time::interval,
 };
 use tracing::{debug, info, instrument, trace, warn};
 
@@ -53,7 +49,6 @@ use crate::{
 };
 
 static TRANSACTION_QUEUE: LazyLock<TransactionQueue> = LazyLock::new(TransactionQueue::new);
-static VAULT: OnceLock<Arc<Mutex<Vault>>> = OnceLock::new();
 
 const TRANSACTION_FEE: u64 = 5_000;
 const CURRENT_SLOT: u64 = 1;
@@ -113,8 +108,7 @@ async fn register_transaction(trx: Transaction) -> Result<TReceiver<Status>> {
 
 #[mutants::skip]
 #[instrument(skip_all)]
-async fn processor(stop_control: OReceiver<()>) {
-    let mut interval = interval(Duration::from_secs(10));
+async fn processor(vault: Arc<RwLock<Vault>>, stop_control: OReceiver<()>) {
     let mut stop_control = stop_control;
     let queue = TRANSACTION_QUEUE.get_receiver();
     loop {
@@ -122,16 +116,11 @@ async fn processor(stop_control: OReceiver<()>) {
         select! {
             Ok(()) = &mut stop_control => {
                 info!("stop control called, ending processor thread");
-                save_vault().await;
                 break;
-            }
-            _ = interval.tick() => {
-                trace!("save vault tick");
-                save_vault().await;
             }
             Ok((trx, tx_status)) = queue.recv() => {
                 trace!("transaction received");
-                execute_transaction(trx, tx_status).await;
+                execute_transaction(&vault, trx, tx_status).await;
             }
             else => {
                 warn!("something weird happened here…");
@@ -141,22 +130,10 @@ async fn processor(stop_control: OReceiver<()>) {
     debug!("processor thread exited");
 }
 
-#[instrument]
-async fn save_vault() {
-    debug!("saving vault");
-    let Some(vault) = VAULT.get() else {
-        warn!("could not get vault");
-        return;
-    };
-    if let Err(err) = vault.lock().await.save().await {
-        warn!("could not save the vault: {err}");
-    }
-}
-
 #[expect(clippy::unwrap_used, reason = "the receivers cannot have been dropped")]
-async fn execute_transaction(trx: Transaction, tx_status: TSender<Status>) {
+async fn execute_transaction(vault: &RwLock<Vault>, trx: Transaction, tx_status: TSender<Status>) {
     let sig = *trx.signature().unwrap();
-    match execute_transaction_inner(trx).await {
+    match execute_transaction_inner(vault, trx).await {
         Ok(()) => tx_status.send(Status::Succeeded).await.unwrap(),
         Err(err) => {
             warn!("transaction {sig:?} failed to run: {err}");
@@ -167,11 +144,11 @@ async fn execute_transaction(trx: Transaction, tx_status: TSender<Status>) {
 
 #[expect(clippy::unwrap_used)]
 #[instrument(skip_all, fields(sig = ?trx.signature().unwrap()))]
-async fn execute_transaction_inner(trx: Transaction) -> Result<()> {
+async fn execute_transaction_inner(vault: &RwLock<Vault>, trx: Transaction) -> Result<()> {
     debug!("executing transaction");
     let metas = trx.message().accounts();
     let payer = trx.message().get_payer().unwrap();
-    let mut accounts = get_transaction_accounts(metas).await?;
+    let mut accounts = get_transaction_accounts(vault, metas).await?;
     let mut mut_accounts = accounts.iter_mut().collect::<Vec<_>>();
 
     let payer_id = metas.iter().position(|meta| *meta.key() == payer).unwrap();
@@ -200,7 +177,7 @@ async fn execute_transaction_inner(trx: Transaction) -> Result<()> {
         return Err(Error::PrismTotalChanged);
     }
 
-    save_accounts(metas, accounts).await?;
+    save_accounts(vault, metas, accounts).await?;
 
     Ok(())
 }
@@ -224,9 +201,12 @@ fn execute_instruction(
 
 #[instrument(skip_all)]
 #[expect(clippy::significant_drop_tightening)]
-async fn get_transaction_accounts(metas: &[AccountMeta]) -> Result<Vec<Wallet>> {
+async fn get_transaction_accounts(
+    vault: &RwLock<Vault>,
+    metas: &[AccountMeta],
+) -> Result<Vec<Wallet>> {
     debug!("getting the instruction’s account from the disk, creating them if necessary");
-    let vault = VAULT.get().ok_or(Error::VaultLock)?.lock().await;
+    let vault = vault.read().await;
     let mut res = Vec::new();
     for meta in metas {
         let account = vault.get(meta.key()).await?;
@@ -238,9 +218,13 @@ async fn get_transaction_accounts(metas: &[AccountMeta]) -> Result<Vec<Wallet>> 
 
 #[instrument(skip_all)]
 #[expect(clippy::significant_drop_tightening)]
-async fn save_accounts(metas: &[AccountMeta], accounts: Vec<Wallet>) -> Result<()> {
+async fn save_accounts(
+    vault: &RwLock<Vault>,
+    metas: &[AccountMeta],
+    accounts: Vec<Wallet>,
+) -> Result<()> {
     debug!("saving accounts on the disk");
-    let mut vault = VAULT.get().ok_or(Error::VaultLock)?.lock().await;
+    let mut vault = vault.write().await;
     for (meta, account) in metas.iter().zip(accounts.iter()) {
         if !meta.is_writable() {
             continue;
@@ -256,6 +240,7 @@ async fn save_accounts(metas: &[AccountMeta], accounts: Vec<Wallet>) -> Result<(
 #[cfg(test)]
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
+    #![expect(clippy::shadow_unrelated)]
 
     use std::assert_matches::assert_matches;
     use std::fs::remove_dir_all;
@@ -280,7 +265,7 @@ mod tests {
 
     pub const PROGRAM: Pubkey = Pubkey::from_bytes(&[2; PUBLIC_KEY_LENGTH]);
 
-    async fn reset_vault<P>(path: P) -> Result<()>
+    async fn reset_vault<P>(path: P) -> Result<Vault>
     where
         P: Into<PathBuf>,
     {
@@ -290,9 +275,8 @@ mod tests {
             remove_dir_all(path)?;
         }
         let vault = Vault::load_or_create().await?;
-        let _ = VAULT.get_or_init(|| Arc::new(Mutex::new(vault)));
 
-        Ok(())
+        Ok(vault)
     }
 
     fn create_unsigned_transaction() -> Result<Transaction> {
@@ -330,9 +314,9 @@ mod tests {
         Ok(trx)
     }
 
-    fn launch_transaction_processor() -> (OSender<()>, JoinHandle<()>) {
+    fn launch_transaction_processor(vault: Arc<RwLock<Vault>>) -> (OSender<()>, JoinHandle<()>) {
         let (tx, rx) = channel();
-        let handle = tokio::spawn(async { processor(rx).await });
+        let handle = tokio::spawn(async { processor(vault, rx).await });
         (tx, handle)
     }
 
@@ -357,23 +341,20 @@ mod tests {
         const VAULT: &str = "/tmp/bifrost/validator-3";
         const AMOUNT: u64 = 1_000_000;
 
-        reset_vault(VAULT).await?;
+        let mut vault = reset_vault(VAULT).await?;
 
         let key1 = Keypair::generate();
         let key2 = Keypair::generate().pubkey();
         let wallet1_before = Wallet { prisms: AMOUNT };
 
-        {
-            #[expect(clippy::unwrap_used)]
-            let mut vault = super::VAULT.get().unwrap().lock().await;
-            vault
-                .save_account(key1.pubkey(), &wallet1_before, 0)
-                .await?;
-            vault.save().await?;
-            drop(vault);
-        }
+        vault
+            .save_account(key1.pubkey(), &wallet1_before, 0)
+            .await?;
+        vault.save().await?;
 
-        let (stop_control, handle) = launch_transaction_processor();
+        let vault = Arc::new(RwLock::new(vault));
+
+        let (stop_control, handle) = launch_transaction_processor(Arc::clone(&vault));
         let mut trx = Transaction::new(0);
         let instruction = system::instruction::transfer(key1.pubkey(), key2, 500_000)?;
         trx.add(&[instruction])?;
@@ -389,6 +370,7 @@ mod tests {
         #[expect(clippy::unwrap_used)]
         stop_control.send(()).unwrap();
         handle.await?;
+        vault.write().await.save().await?;
 
         // Then
         let vault = Vault::load_or_create().await?;
@@ -407,23 +389,19 @@ mod tests {
         const VAULT: &str = "/tmp/bifrost/validator-4";
         const AMOUNT: u64 = 500_000;
 
-        reset_vault(VAULT).await?;
+        let mut vault = reset_vault(VAULT).await?;
 
         let key1 = Keypair::generate();
         let key2 = Keypair::generate().pubkey();
         let wallet1_before = Wallet { prisms: AMOUNT };
 
-        {
-            #[expect(clippy::unwrap_used)]
-            let mut vault = super::VAULT.get().unwrap().lock().await;
-            vault
-                .save_account(key1.pubkey(), &wallet1_before, 0)
-                .await?;
-            vault.save().await?;
-            drop(vault);
-        }
+        vault
+            .save_account(key1.pubkey(), &wallet1_before, 0)
+            .await?;
+        vault.save().await?;
 
-        let (stop_control, handle) = launch_transaction_processor();
+        let vault = Arc::new(RwLock::new(vault));
+        let (stop_control, handle) = launch_transaction_processor(vault);
         let mut trx = Transaction::new(0);
         let instruction = system::instruction::transfer(key1.pubkey(), key2, 500_000)?;
         trx.add(&[instruction])?;
@@ -452,23 +430,19 @@ mod tests {
         const VAULT: &str = "/tmp/bifrost/validator-5";
         const AMOUNT: u64 = 1_000_000;
 
-        reset_vault(VAULT).await?;
+        let mut vault = reset_vault(VAULT).await?;
 
         let key1 = Keypair::generate();
         let key2 = Keypair::generate().pubkey();
         let wallet1_before = Wallet { prisms: AMOUNT };
 
-        {
-            #[expect(clippy::unwrap_used)]
-            let mut vault = super::VAULT.get().unwrap().lock().await;
-            vault
-                .save_account(key1.pubkey(), &wallet1_before, 0)
-                .await?;
-            vault.save().await?;
-            drop(vault);
-        }
+        vault
+            .save_account(key1.pubkey(), &wallet1_before, 0)
+            .await?;
+        vault.save().await?;
+        let vault = Arc::new(RwLock::new(vault));
 
-        let (stop_control, handle) = launch_transaction_processor();
+        let (stop_control, handle) = launch_transaction_processor(vault);
         let mut trx = Transaction::new(0);
         let instruction = testing_dummy::instruction::burn_prisms(key1.pubkey(), key2, 500_000)?;
         trx.add(&[instruction])?;

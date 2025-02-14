@@ -3,7 +3,7 @@
 // Creation date: Sunday 09 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Monday 10 February 2025 @ 20:49:48
+// Last modified: Saturday 15 February 2025 @ 17:01:55
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -26,24 +26,19 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use std::{any::type_name, fmt::Debug, path::PathBuf, sync::LazyLock};
+use std::{any::type_name, fmt::Debug, path::PathBuf};
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use memmap2::MmapOptions;
 use tokio::{
     fs::{self, File, OpenOptions},
     io::AsyncWriteExt,
-    sync::Semaphore,
 };
 use tracing::{debug, instrument, trace};
 
 use crate::io::Error;
 
 use super::Result;
-
-// We don’t want writes (specifically happends) to happen at the same time otherwise we risk getting some garbled mess
-// Not the most optimal solution (it’d need to be per file maybe), but good enough for our purposes
-static SEMAPHORE: LazyLock<Semaphore> = LazyLock::new(|| Semaphore::new(1));
 
 #[instrument]
 pub async fn read_from_file<P, T>(path: P) -> Result<T>
@@ -110,25 +105,20 @@ where
     Ok(())
 }
 
-#[expect(clippy::unwrap_used)]
 #[instrument(skip(data))]
-pub async fn append_to_file<P, B>(path: P, data: &B) -> Result<(u64, u64)>
+pub async fn append_to_file<P>(path: P, data: &[u8]) -> Result<()>
 where
     P: Into<PathBuf> + Debug,
-    B: BorshSerialize + Send + Sync,
 {
-    debug!(kind = type_name::<B>(), "appending data to file");
-    let data = borsh::to_vec(data).unwrap();
+    debug!("appending data to file");
     let mut file = OpenOptions::new()
         .create(true)
         .append(true)
         .open(path.into())
         .await?;
-    let _guard = SEMAPHORE.acquire().await?;
-    let offset = file.metadata().await?.len();
-    file.write_all(&data).await?;
-    file.flush().await?;
-    Ok((data.len() as u64, offset))
+    file.write_all(data).await?;
+
+    Ok(())
 }
 
 #[instrument]
@@ -148,6 +138,7 @@ where
 #[cfg(test)]
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
+    #![expect(clippy::unwrap_used)]
 
     use std::assert_matches::assert_matches;
     use std::path::Path;
@@ -197,8 +188,10 @@ mod tests {
             remove_file(&path).await?;
         }
         let wallet = Wallet { prisms: 989_237 };
-        let (write_size, _offset) = append_to_file(&path, &wallet).await?;
-        let _ = append_to_file(&path, &wallet).await?;
+        let data = borsh::to_vec(&wallet).unwrap();
+        append_to_file(&path, &data).await?;
+        append_to_file(&path, &data).await?;
+        let write_size = data.len() as u64;
 
         // When
         let _: Wallet = read_from_file_map(path, write_size, write_size).await?;
@@ -218,7 +211,9 @@ mod tests {
             remove_file(&path).await?;
         }
         let wallet = Wallet { prisms: 989_237 };
-        let (write_size, _offset) = append_to_file(&path, &wallet).await?;
+        let data = borsh::to_vec(&wallet).unwrap();
+        let write_size = data.len() as u64;
+        append_to_file(&path, &data).await?;
 
         // When
         let reloaded: Result<Wallet> = read_from_file_map(path, write_size, write_size).await;

@@ -3,7 +3,7 @@
 // Creation date: Sunday 09 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Tuesday 11 February 2025 @ 11:31:28
+// Last modified: Saturday 15 February 2025 @ 17:13:47
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -118,15 +118,17 @@ mod tests {
         fs::{remove_dir_all, OpenOptions},
         io::Write,
         path::Path,
+        time::Duration,
     };
 
     use test_log::test;
+    use tokio::time::sleep;
 
     use crate::{
         account::Wallet,
         crypto::Keypair,
         io::{
-            support::append_to_file,
+            location::SlotWriter,
             vault::{set_vault_path, Vault},
             MAX_ACCOUNT_FILE_SIZE,
         },
@@ -277,18 +279,18 @@ mod tests {
         reset_vault(VAULT)?;
         Vault::init_vault().await?;
         let account = Wallet { prisms: 398_399 };
-        let path = get_vault_path()
-            .join("accounts")
-            .join(format!("{SLOT}.{ID}"));
-        append_to_file(&path, &account).await?;
-        append_to_file(&path, &account).await?;
-        append_to_file(&path, &account).await?;
+        let mut writer = SlotWriter::new(SLOT);
+        writer.append(&account).await?;
+        writer.append(&account).await?;
+        writer.append(&account).await?;
+        drop(writer);
+        sleep(Duration::from_millis(2)).await;
         let account_data = borsh::to_vec(&account)?;
         let len = account_data.len() as u64;
 
         let loc = AccountDiskLocation {
             slot: SLOT,
-            id: ID,
+            id: 0,
             offset: len * 2,
             size: len,
         };
