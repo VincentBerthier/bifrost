@@ -3,7 +3,7 @@
 // Creation date: Saturday 08 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Thursday 13 February 2025 @ 09:49:56
+// Last modified: Friday 14 February 2025 @ 14:23:42
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -26,32 +26,52 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use std::{
-    collections::{HashMap, VecDeque},
-    sync::{Arc, LazyLock, OnceLock},
-};
+use std::sync::{Arc, LazyLock, OnceLock};
 
-use tokio::sync::{Mutex, Notify};
+use async_channel::{unbounded, Receiver, Sender};
+use tokio::sync::{
+    mpsc::{channel, Receiver as TReceiver, Sender as TSender},
+    Mutex,
+};
 use tracing::{debug, instrument, trace, warn};
 
 use super::{Error, Result};
 use crate::{
     account::{AccountMeta, TransactionAccount, Wallet},
-    crypto::{Pubkey, Signature},
+    crypto::Pubkey,
     io::Vault,
     program::dispatcher::dispatch,
     transaction::{CompiledInstruction, Transaction},
 };
 
-static TRANSACTION_QUEUE: LazyLock<Mutex<VecDeque<Transaction>>> =
-    LazyLock::new(|| Mutex::new(VecDeque::new()));
-static TRANSACTION_RECEIVED: LazyLock<Arc<Notify>> = LazyLock::new(|| Arc::new(Notify::new()));
-static TRANSACTIONS_STATUS: LazyLock<Arc<Mutex<HashMap<Signature, Status>>>> =
-    LazyLock::new(|| Arc::new(Mutex::new(HashMap::new())));
+static TRANSACTION_QUEUE: LazyLock<TransactionQueue> = LazyLock::new(TransactionQueue::new);
 
 static VAULT: OnceLock<Arc<Mutex<Vault>>> = OnceLock::new();
 
 const CURRENT_SLOT: u64 = 1;
+
+struct TransactionQueue {
+    sender: Arc<Sender<(Transaction, TSender<Status>)>>,
+    receiver: Arc<Receiver<(Transaction, TSender<Status>)>>,
+}
+
+impl TransactionQueue {
+    fn new() -> Self {
+        let (tx, rx) = unbounded();
+        Self {
+            sender: Arc::new(tx),
+            receiver: Arc::new(rx),
+        }
+    }
+
+    fn get_sender(&self) -> Arc<Sender<(Transaction, TSender<Status>)>> {
+        Arc::clone(&self.sender)
+    }
+
+    fn get_receiver(&self) -> Arc<Receiver<(Transaction, TSender<Status>)>> {
+        Arc::clone(&self.receiver)
+    }
+}
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 enum Status {
@@ -62,14 +82,8 @@ enum Status {
     Succeeded,
 }
 
-#[instrument]
-async fn update_trx_status(sig: Signature, status: Status) {
-    debug!("setting transaction status");
-    TRANSACTIONS_STATUS.lock().await.insert(sig, status);
-}
-
 #[instrument(skip_all)]
-async fn register_transaction(trx: Transaction) -> Result<()> {
+async fn register_transaction(trx: Transaction) -> Result<TReceiver<Status>> {
     debug!("registering new transaction");
     if !trx.is_valid() {
         warn!("cannot add an invalid transaction (signature issue)");
@@ -77,32 +91,40 @@ async fn register_transaction(trx: Transaction) -> Result<()> {
     }
 
     trace!("adding transaction");
-    #[expect(clippy::unwrap_used, reason = "trx is valid, so signature exists")]
-    update_trx_status(trx.signature().copied().unwrap(), Status::Pending).await;
-    TRANSACTION_QUEUE.lock().await.push_back(trx);
-    TRANSACTION_RECEIVED.notify_one();
+    let (tx, rx) = channel(5);
+    #[expect(clippy::unwrap_used, reason = "channel was just created, can’t fail")]
+    tx.send(Status::Pending).await.unwrap();
+    #[expect(
+        clippy::unwrap_used,
+        reason = "can only fail if the validator is terminated"
+    )]
+    TRANSACTION_QUEUE
+        .get_sender()
+        .send((trx, tx))
+        .await
+        .unwrap();
 
-    Ok(())
+    Ok(rx)
 }
 
-#[expect(clippy::unwrap_used, reason = "trx is valid, so signature exists")]
+#[expect(clippy::unwrap_used, reason = "the receivers cannot have been dropped")]
 #[instrument]
 async fn processor() -> ! {
     let vault = Vault::load_or_create().await.unwrap();
     let _ = VAULT.get_or_init(|| Arc::new(Mutex::new(vault)));
+    let trx_receiver = TRANSACTION_QUEUE.get_receiver();
     loop {
         trace!("waiting for notification");
-        TRANSACTION_RECEIVED.notified().await;
-        let Some(trx) = TRANSACTION_QUEUE.lock().await.pop_front() else {
+        let Ok((trx, tx_status)) = trx_receiver.recv().await else {
             warn!("got notified of transaction presence but didn’t find one…");
             continue;
         };
         let sig = *trx.signature().unwrap();
         match execute_transaction(trx).await {
-            Ok(()) => update_trx_status(sig, Status::Succeeded).await,
+            Ok(()) => tx_status.send(Status::Succeeded).await.unwrap(),
             Err(err) => {
                 warn!("transaction {sig:?} failed to run: {err}");
-                update_trx_status(sig, Status::Failed).await;
+                tx_status.send(Status::Failed).await.unwrap();
             }
         }
     }
@@ -183,7 +205,6 @@ async fn save_accounts(metas: &[AccountMeta], accounts: Vec<Wallet>) -> Result<(
 #[cfg(test)]
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
-    #![expect(clippy::unwrap_used)]
 
     use std::assert_matches::assert_matches;
     use std::fs::remove_dir_all;
@@ -191,7 +212,7 @@ mod tests {
 
     use ed25519_dalek::PUBLIC_KEY_LENGTH;
     use test_log::test;
-    use tokio::time::{sleep, Duration};
+    use tracing::info;
 
     use crate::account::{AccountMeta, Wallet, Writable};
     use crate::crypto::{Keypair, Pubkey};
@@ -274,36 +295,6 @@ mod tests {
     }
 
     #[test(tokio::test)]
-    async fn add_transaction_to_queue() -> TestResult {
-        // Given
-        let trx = create_signed_transaction()?;
-
-        // When
-        register_transaction(trx).await?;
-
-        // Then
-        assert_eq!(TRANSACTION_QUEUE.lock().await.len(), 1);
-        Ok(())
-    }
-
-    #[test(tokio::test)]
-    async fn processing_a_trx_removes_it_from_the_queue() -> TestResult {
-        // Given
-        const VAULT: &str = "/tmp/bifrost/validator-1";
-        reset_vault(VAULT)?;
-        let trx = create_signed_transaction()?;
-        launch_transaction_processor();
-        register_transaction(trx).await?;
-
-        // When
-        sleep(Duration::from_millis(2)).await;
-
-        // Then
-        assert!(TRANSACTION_QUEUE.lock().await.is_empty());
-        Ok(())
-    }
-
-    #[test(tokio::test)]
     async fn run_system_transfer_transaction() -> TestResult {
         // Given
         const VAULT: &str = "/tmp/bifrost/validator-3";
@@ -327,11 +318,14 @@ mod tests {
         let instruction = system::instruction::transfer(key1.pubkey(), key2, AMOUNT)?;
         trx.add(&[instruction])?;
         trx.sign(&key1)?;
-        let sig = *trx.signature().unwrap();
 
         // When
-        register_transaction(trx).await?;
-        sleep(Duration::from_millis(5)).await;
+        let mut status = Status::Pending;
+        let mut rx = register_transaction(trx).await?;
+        while let Some(new_status) = rx.recv().await {
+            info!("received new transaction status: {new_status:?}");
+            status = new_status;
+        }
 
         // Then
         super::VAULT
@@ -344,7 +338,7 @@ mod tests {
         let vault = Vault::load_or_create().await?;
         let wallet1_after = vault.get(&key1.pubkey()).await?;
         let wallet2_after = vault.get(&key2).await?;
-        assert_matches!(TRANSACTIONS_STATUS.lock().await.get(&sig), Some(&status) if status == Status::Succeeded);
+        assert_eq!(status, Status::Succeeded);
         assert_eq!(wallet1_after.prisms, 0);
         assert_eq!(wallet2_after.prisms, AMOUNT);
 

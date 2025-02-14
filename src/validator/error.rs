@@ -3,7 +3,7 @@
 // Creation date: Saturday 08 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Sunday 09 February 2025 @ 16:53:52
+// Last modified: Friday 14 February 2025 @ 13:10:25
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -35,6 +35,12 @@ pub enum Error {
     /// The transaction's signatures are missing or do not match the expectation.
     #[display("the transaction’s signatures are invalid")]
     InvalidTransactionSignatures,
+    /// Error while sending a message to a thread
+    #[display("could not send a '{kind}' message")]
+    SendMessage {
+        /// The kind of message that failed.
+        kind: &'static str,
+    },
     /// When the lock on the vault could not be obtained.
     #[display("the lock on the vault could not be obtained")]
     VaultLock,
