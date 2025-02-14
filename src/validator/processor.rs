@@ -3,7 +3,7 @@
 // Creation date: Saturday 08 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Friday 14 February 2025 @ 14:23:42
+// Last modified: Friday 14 February 2025 @ 15:44:46
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -26,14 +26,22 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use std::sync::{Arc, LazyLock, OnceLock};
+use std::{
+    sync::{Arc, LazyLock, OnceLock},
+    time::Duration,
+};
 
 use async_channel::{unbounded, Receiver, Sender};
-use tokio::sync::{
-    mpsc::{channel, Receiver as TReceiver, Sender as TSender},
-    Mutex,
+use tokio::{
+    select,
+    sync::{
+        mpsc::{channel, Receiver as TReceiver, Sender as TSender},
+        oneshot::Receiver as OReceiver,
+        Mutex,
+    },
+    time::interval,
 };
-use tracing::{debug, instrument, trace, warn};
+use tracing::{debug, info, instrument, trace, warn};
 
 use super::{Error, Result};
 use crate::{
@@ -103,27 +111,63 @@ async fn register_transaction(trx: Transaction) -> Result<TReceiver<Status>> {
     Ok(rx)
 }
 
-#[expect(clippy::unwrap_used, reason = "the receivers cannot have been dropped")]
-#[instrument]
-async fn processor() -> ! {
+#[mutants::skip]
+#[instrument(skip_all)]
+async fn processor(stop_control: OReceiver<()>) {
+    let mut interval = interval(Duration::from_secs(10));
+    let mut stop_control = stop_control;
     let queue = TRANSACTION_QUEUE.get_receiver();
     loop {
         trace!("waiting for notification");
-        let (trx, tx_status) = queue.recv().await.unwrap();
-        let sig = *trx.signature().unwrap();
-        match execute_transaction(trx).await {
-            Ok(()) => tx_status.send(Status::Succeeded).await.unwrap(),
-            Err(err) => {
-                warn!("transaction {sig:?} failed to run: {err}");
-                tx_status.send(Status::Failed).await.unwrap();
+        select! {
+            Ok(()) = &mut stop_control => {
+                info!("stop control called, ending processor thread");
+                save_vault().await;
+                break;
             }
+            _ = interval.tick() => {
+                trace!("save vault tick");
+                save_vault().await;
+            }
+            Ok((trx, tx_status)) = queue.recv() => {
+                trace!("transaction received");
+                execute_transaction(trx, tx_status).await;
+            }
+            else => {
+                warn!("something weird happened here…");
+            }
+        }
+    }
+    debug!("processor thread exited");
+}
+
+#[instrument]
+async fn save_vault() {
+    debug!("saving vault");
+    let Some(vault) = VAULT.get() else {
+        warn!("could not get vault");
+        return;
+    };
+    if let Err(err) = vault.lock().await.save().await {
+        warn!("could not save the vault: {err}");
+    }
+}
+
+#[expect(clippy::unwrap_used, reason = "the receivers cannot have been dropped")]
+async fn execute_transaction(trx: Transaction, tx_status: TSender<Status>) {
+    let sig = *trx.signature().unwrap();
+    match execute_transaction_inner(trx).await {
+        Ok(()) => tx_status.send(Status::Succeeded).await.unwrap(),
+        Err(err) => {
+            warn!("transaction {sig:?} failed to run: {err}");
+            tx_status.send(Status::Failed).await.unwrap();
         }
     }
 }
 
 #[expect(clippy::unwrap_used)]
 #[instrument(skip_all, fields(sig = ?trx.signature().unwrap()))]
-async fn execute_transaction(trx: Transaction) -> Result<()> {
+async fn execute_transaction_inner(trx: Transaction) -> Result<()> {
     debug!("executing transaction");
     let metas = trx.message().accounts();
     let payer = trx.message().get_payer().unwrap();
@@ -211,6 +255,8 @@ mod tests {
 
     use ed25519_dalek::PUBLIC_KEY_LENGTH;
     use test_log::test;
+    use tokio::sync::oneshot::{channel, Sender as OSender};
+    use tokio::task::JoinHandle;
     use tracing::info;
 
     use crate::account::{AccountMeta, Wallet, Writable};
@@ -276,8 +322,10 @@ mod tests {
         Ok(trx)
     }
 
-    fn launch_transaction_processor() {
-        tokio::spawn(async { processor().await });
+    fn launch_transaction_processor() -> (OSender<()>, JoinHandle<()>) {
+        let (tx, rx) = channel();
+        let handle = tokio::spawn(async { processor(rx).await });
+        (tx, handle)
     }
 
     #[test(tokio::test)]
@@ -317,7 +365,7 @@ mod tests {
             drop(vault);
         }
 
-        launch_transaction_processor();
+        let (stop_control, handle) = launch_transaction_processor();
         let mut trx = Transaction::new(0);
         let instruction = system::instruction::transfer(key1.pubkey(), key2, 500_000)?;
         trx.add(&[instruction])?;
@@ -330,21 +378,62 @@ mod tests {
             info!("received new transaction status: {new_status:?}");
             status = new_status;
         }
+        #[expect(clippy::unwrap_used)]
+        stop_control.send(()).unwrap();
+        handle.await?;
 
         // Then
-        super::VAULT
-            .get()
-            .ok_or(Error::VaultLock)?
-            .lock()
-            .await
-            .save()
-            .await?;
         let vault = Vault::load_or_create().await?;
         let wallet1_after = vault.get(&key1.pubkey()).await?;
         let wallet2_after = vault.get(&key2).await?;
         assert_eq!(status, Status::Succeeded);
         assert_eq!(wallet1_after.prisms, AMOUNT - 500_000 - TRANSACTION_FEE);
         assert_eq!(wallet2_after.prisms, 500_000);
+
+        Ok(())
+    }
+
+    #[test(tokio::test)]
+    async fn fail_system_transfer_transaction() -> TestResult {
+        // Given
+        const VAULT: &str = "/tmp/bifrost/validator-4";
+        const AMOUNT: u64 = 500_000;
+
+        reset_vault(VAULT).await?;
+
+        let key1 = Keypair::generate();
+        let key2 = Keypair::generate().pubkey();
+        let wallet1_before = Wallet { prisms: AMOUNT };
+
+        {
+            #[expect(clippy::unwrap_used)]
+            let mut vault = super::VAULT.get().unwrap().lock().await;
+            vault
+                .save_account(key1.pubkey(), &wallet1_before, 0)
+                .await?;
+            vault.save().await?;
+            drop(vault);
+        }
+
+        let (stop_control, handle) = launch_transaction_processor();
+        let mut trx = Transaction::new(0);
+        let instruction = system::instruction::transfer(key1.pubkey(), key2, 500_000)?;
+        trx.add(&[instruction])?;
+        trx.sign(&key1)?;
+
+        // When
+        let mut status = Status::Pending;
+        let mut rx = register_transaction(trx).await?;
+        while let Some(new_status) = rx.recv().await {
+            info!("received new transaction status: {new_status:?}");
+            status = new_status;
+        }
+        #[expect(clippy::unwrap_used)]
+        stop_control.send(()).unwrap();
+        handle.await?;
+
+        // Then
+        assert_eq!(status, Status::Failed);
 
         Ok(())
     }
