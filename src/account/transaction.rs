@@ -99,7 +99,7 @@ impl<'a> TransactionAccount<'a> {
     /// is read only.
     #[instrument(skip(self))]
     pub fn add_prisms(&self, amount: u64) -> Result<()> {
-        debug!("adding {amount} prisms");
+        debug!(current = *self.prisms.borrow(), "adding {amount} prisms");
         let res = self
             .prisms
             .borrow()
@@ -119,7 +119,10 @@ impl<'a> TransactionAccount<'a> {
     /// is read only.
     #[instrument(skip(self))]
     pub fn sub_prisms(&self, amount: u64) -> Result<()> {
-        debug!("subtracting {amount} prisms");
+        debug!(
+            current = *self.prisms.borrow(),
+            "subtracting {amount} prisms"
+        );
         let res = self
             .prisms
             .borrow()

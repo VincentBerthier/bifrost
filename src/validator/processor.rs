@@ -176,6 +176,9 @@ async fn execute_transaction_inner(trx: Transaction) -> Result<()> {
 
     let payer_id = metas.iter().position(|meta| *meta.key() == payer).unwrap();
     mut_accounts[payer_id].prisms -= TRANSACTION_FEE;
+    let total_prisms = mut_accounts
+        .iter()
+        .fold(0, |acc, account| acc + account.prisms);
 
     {
         trace!("preparing accounts");
@@ -190,6 +193,11 @@ async fn execute_transaction_inner(trx: Transaction) -> Result<()> {
             let program = metas[instruction.program_account_id as usize].key();
             execute_instruction(program, instruction, &trx_accounts)?;
         }
+    }
+    let new_total_prisms = accounts.iter().fold(0, |acc, account| acc + account.prisms);
+    if total_prisms != new_total_prisms {
+        warn!("there was a change in the total of prisms: ignoring transaction");
+        return Err(Error::PrismTotalChanged);
     }
 
     save_accounts(metas, accounts).await?;
@@ -262,7 +270,7 @@ mod tests {
     use crate::account::{AccountMeta, Wallet, Writable};
     use crate::crypto::{Keypair, Pubkey};
     use crate::io::set_vault_path;
-    use crate::program::system;
+    use crate::program::{system, testing_dummy};
     use crate::transaction::{Instruction, Transaction};
 
     use super::super::Error;
@@ -418,6 +426,51 @@ mod tests {
         let (stop_control, handle) = launch_transaction_processor();
         let mut trx = Transaction::new(0);
         let instruction = system::instruction::transfer(key1.pubkey(), key2, 500_000)?;
+        trx.add(&[instruction])?;
+        trx.sign(&key1)?;
+
+        // When
+        let mut status = Status::Pending;
+        let mut rx = register_transaction(trx).await?;
+        while let Some(new_status) = rx.recv().await {
+            info!("received new transaction status: {new_status:?}");
+            status = new_status;
+        }
+        #[expect(clippy::unwrap_used)]
+        stop_control.send(()).unwrap();
+        handle.await?;
+
+        // Then
+        assert_eq!(status, Status::Failed);
+
+        Ok(())
+    }
+
+    #[test(tokio::test)]
+    async fn prisms_total_changed() -> TestResult {
+        // Given
+        const VAULT: &str = "/tmp/bifrost/validator-5";
+        const AMOUNT: u64 = 1_000_000;
+
+        reset_vault(VAULT).await?;
+
+        let key1 = Keypair::generate();
+        let key2 = Keypair::generate().pubkey();
+        let wallet1_before = Wallet { prisms: AMOUNT };
+
+        {
+            #[expect(clippy::unwrap_used)]
+            let mut vault = super::VAULT.get().unwrap().lock().await;
+            vault
+                .save_account(key1.pubkey(), &wallet1_before, 0)
+                .await?;
+            vault.save().await?;
+            drop(vault);
+        }
+
+        let (stop_control, handle) = launch_transaction_processor();
+        let mut trx = Transaction::new(0);
+        let instruction = testing_dummy::instruction::burn_prisms(key1.pubkey(), key2, 500_000)?;
         trx.add(&[instruction])?;
         trx.sign(&key1)?;
 

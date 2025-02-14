@@ -4,6 +4,7 @@ use crate::{account::TransactionAccount, crypto::Pubkey};
 
 use super::{
     system::{self, SYSTEM_PROGRAM},
+    testing_dummy::{self, TESTING_PROGRAM},
     Error, Result,
 };
 
@@ -23,6 +24,7 @@ pub fn dispatch(program: &Pubkey, accounts: &[TransactionAccount], payload: &[u8
     );
     match *program {
         SYSTEM_PROGRAM => system::execute_instruction(accounts, payload),
+        TESTING_PROGRAM => testing_dummy::execute_instruction(accounts, payload),
         key => Err(Error::UnknownProgram { key }),
     }
 }

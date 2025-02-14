@@ -35,6 +35,9 @@ pub enum Error {
     /// The transaction's signatures are missing or do not match the expectation.
     #[display("the transaction’s signatures are invalid")]
     InvalidTransactionSignatures,
+    /// The total amount of prisms has changed while it's not supposed to.
+    #[display("prisms total has changed")]
+    PrismTotalChanged,
     /// Error while sending a message to a thread
     #[display("could not send a '{kind}' message")]
     SendMessage {

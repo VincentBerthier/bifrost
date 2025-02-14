@@ -30,6 +30,8 @@
 pub mod dispatcher;
 /// The system program
 pub mod system;
+/// A dummy program for testing only
+pub mod testing_dummy;
 
 mod error;
 
