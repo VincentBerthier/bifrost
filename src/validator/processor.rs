@@ -45,9 +45,9 @@ use crate::{
 };
 
 static TRANSACTION_QUEUE: LazyLock<TransactionQueue> = LazyLock::new(TransactionQueue::new);
-
 static VAULT: OnceLock<Arc<Mutex<Vault>>> = OnceLock::new();
 
+const TRANSACTION_FEE: u64 = 5_000;
 const CURRENT_SLOT: u64 = 1;
 
 struct TransactionQueue {
@@ -64,8 +64,12 @@ impl TransactionQueue {
         }
     }
 
-    fn get_sender(&self) -> Arc<Sender<(Transaction, TSender<Status>)>> {
-        Arc::clone(&self.sender)
+    async fn send(&self, transaction: Transaction, status_tx: TSender<Status>) {
+        #[expect(
+            clippy::unwrap_used,
+            reason = "can only fail if the validator is terminated"
+        )]
+        self.sender.send((transaction, status_tx)).await.unwrap();
     }
 
     fn get_receiver(&self) -> Arc<Receiver<(Transaction, TSender<Status>)>> {
@@ -94,15 +98,7 @@ async fn register_transaction(trx: Transaction) -> Result<TReceiver<Status>> {
     let (tx, rx) = channel(5);
     #[expect(clippy::unwrap_used, reason = "channel was just created, can’t fail")]
     tx.send(Status::Pending).await.unwrap();
-    #[expect(
-        clippy::unwrap_used,
-        reason = "can only fail if the validator is terminated"
-    )]
-    TRANSACTION_QUEUE
-        .get_sender()
-        .send((trx, tx))
-        .await
-        .unwrap();
+    TRANSACTION_QUEUE.send(trx, tx).await;
 
     Ok(rx)
 }
@@ -110,15 +106,10 @@ async fn register_transaction(trx: Transaction) -> Result<TReceiver<Status>> {
 #[expect(clippy::unwrap_used, reason = "the receivers cannot have been dropped")]
 #[instrument]
 async fn processor() -> ! {
-    let vault = Vault::load_or_create().await.unwrap();
-    let _ = VAULT.get_or_init(|| Arc::new(Mutex::new(vault)));
-    let trx_receiver = TRANSACTION_QUEUE.get_receiver();
+    let queue = TRANSACTION_QUEUE.get_receiver();
     loop {
         trace!("waiting for notification");
-        let Ok((trx, tx_status)) = trx_receiver.recv().await else {
-            warn!("got notified of transaction presence but didn’t find one…");
-            continue;
-        };
+        let (trx, tx_status) = queue.recv().await.unwrap();
         let sig = *trx.signature().unwrap();
         match execute_transaction(trx).await {
             Ok(()) => tx_status.send(Status::Succeeded).await.unwrap(),
@@ -135,11 +126,16 @@ async fn processor() -> ! {
 async fn execute_transaction(trx: Transaction) -> Result<()> {
     debug!("executing transaction");
     let metas = trx.message().accounts();
+    let payer = trx.message().get_payer().unwrap();
     let mut accounts = get_transaction_accounts(metas).await?;
-    let mut trx_accounts = accounts.iter_mut().collect::<Vec<_>>();
+    let mut mut_accounts = accounts.iter_mut().collect::<Vec<_>>();
+
+    let payer_id = metas.iter().position(|meta| *meta.key() == payer).unwrap();
+    mut_accounts[payer_id].prisms -= TRANSACTION_FEE;
+
     {
         trace!("preparing accounts");
-        let trx_accounts2 = trx_accounts
+        let trx_accounts = mut_accounts
             .iter_mut()
             .enumerate()
             .map(|(i, account)| TransactionAccount::new(&metas[i], account))
@@ -148,7 +144,7 @@ async fn execute_transaction(trx: Transaction) -> Result<()> {
         trace!("looping through instructions");
         for instruction in &trx.message().instructions {
             let program = metas[instruction.program_account_id as usize].key();
-            execute_instruction(program, instruction, &trx_accounts2)?;
+            execute_instruction(program, instruction, &trx_accounts)?;
         }
     }
 
@@ -194,6 +190,9 @@ async fn save_accounts(metas: &[AccountMeta], accounts: Vec<Wallet>) -> Result<(
     debug!("saving accounts on the disk");
     let mut vault = VAULT.get().ok_or(Error::VaultLock)?.lock().await;
     for (meta, account) in metas.iter().zip(accounts.iter()) {
+        if !meta.is_writable() {
+            continue;
+        }
         vault
             .save_account(*meta.key(), account, CURRENT_SLOT)
             .await?;
@@ -227,7 +226,7 @@ mod tests {
 
     pub const PROGRAM: Pubkey = Pubkey::from_bytes(&[2; PUBLIC_KEY_LENGTH]);
 
-    fn reset_vault<P>(path: P) -> Result<()>
+    async fn reset_vault<P>(path: P) -> Result<()>
     where
         P: Into<PathBuf>,
     {
@@ -236,6 +235,8 @@ mod tests {
         if path.exists() {
             remove_dir_all(path)?;
         }
+        let vault = Vault::load_or_create().await?;
+        let _ = VAULT.get_or_init(|| Arc::new(Mutex::new(vault)));
 
         Ok(())
     }
@@ -298,24 +299,27 @@ mod tests {
     async fn run_system_transfer_transaction() -> TestResult {
         // Given
         const VAULT: &str = "/tmp/bifrost/validator-3";
-        const AMOUNT: u64 = 1_000;
+        const AMOUNT: u64 = 1_000_000;
 
-        reset_vault(VAULT)?;
-        let mut vault_init = Vault::load_or_create().await?;
+        reset_vault(VAULT).await?;
 
         let key1 = Keypair::generate();
         let key2 = Keypair::generate().pubkey();
         let wallet1_before = Wallet { prisms: AMOUNT };
 
-        vault_init
-            .save_account(key1.pubkey(), &wallet1_before, 0)
-            .await?;
-        vault_init.save().await?;
-        drop(vault_init);
+        {
+            #[expect(clippy::unwrap_used)]
+            let mut vault = super::VAULT.get().unwrap().lock().await;
+            vault
+                .save_account(key1.pubkey(), &wallet1_before, 0)
+                .await?;
+            vault.save().await?;
+            drop(vault);
+        }
 
         launch_transaction_processor();
         let mut trx = Transaction::new(0);
-        let instruction = system::instruction::transfer(key1.pubkey(), key2, AMOUNT)?;
+        let instruction = system::instruction::transfer(key1.pubkey(), key2, 500_000)?;
         trx.add(&[instruction])?;
         trx.sign(&key1)?;
 
@@ -339,8 +343,8 @@ mod tests {
         let wallet1_after = vault.get(&key1.pubkey()).await?;
         let wallet2_after = vault.get(&key2).await?;
         assert_eq!(status, Status::Succeeded);
-        assert_eq!(wallet1_after.prisms, 0);
-        assert_eq!(wallet2_after.prisms, AMOUNT);
+        assert_eq!(wallet1_after.prisms, AMOUNT - 500_000 - TRANSACTION_FEE);
+        assert_eq!(wallet2_after.prisms, 500_000);
 
         Ok(())
     }

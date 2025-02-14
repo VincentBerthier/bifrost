@@ -56,10 +56,7 @@ enum SystemInstruction {
 /// # Errors
 /// if the instruction fails to complete (missing accounts, arithmetic overflows, *etc.*).
 #[instrument(skip_all)]
-pub fn execute_instruction<'a, 'b>(
-    accounts: &'a [TransactionAccount<'b>],
-    payload: &[u8],
-) -> Result<()> {
+pub fn execute_instruction(accounts: &[TransactionAccount], payload: &[u8]) -> Result<()> {
     debug!("received system insruction");
     match borsh::from_slice(payload)? {
         SystemInstruction::Transfer(amount) => transfer(accounts, amount),
@@ -67,7 +64,7 @@ pub fn execute_instruction<'a, 'b>(
 }
 
 #[instrument(skip(accounts))]
-fn transfer<'a, 'b>(accounts: &'a [TransactionAccount<'b>], amount: u64) -> Result<()> {
+fn transfer(accounts: &[TransactionAccount], amount: u64) -> Result<()> {
     debug!("transferring prisms");
     let mut accounts_iter = accounts.iter();
     let payer = next_account(&mut accounts_iter)?;
