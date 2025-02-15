@@ -3,7 +3,7 @@
 // Creation date: Saturday 08 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Friday 14 February 2025 @ 13:10:25
+// Last modified: Sunday 16 February 2025 @ 00:10:14
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -47,12 +47,18 @@ pub enum Error {
     /// When the lock on the vault could not be obtained.
     #[display("the lock on the vault could not be obtained")]
     VaultLock,
+    /// When byte array doesn't have the right size for a block hash
+    #[display("the given hash is not compatible with a block hash")]
+    WrongHashLength,
     /// An error occurred in the vault
     #[from]
     Io(crate::io::Error),
     /// An error occurred while running a program.
     #[from]
     Program(crate::program::Error),
+    /// When a string is not a valid `bs58` encoding of a block hash
+    #[from]
+    HashParse(bs58::decode::Error),
 }
 
 impl core::error::Error for Error {}

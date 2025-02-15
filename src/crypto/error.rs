@@ -3,7 +3,7 @@
 // Creation date: Friday 07 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Sunday 09 February 2025 @ 16:52:14
+// Last modified: Sunday 16 February 2025 @ 00:41:21
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -26,8 +26,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use std::array::TryFromSliceError;
-
 use derive_more::derive::{Display, From};
 use ed25519_dalek::SignatureError;
 
@@ -41,9 +39,9 @@ pub enum Error {
     RandomEnginePoisonedLock,
     /// Tried to used too many seeds to derive a public key.
     TooManySeeds,
-    /// Tried to cast a byte array of the wrong length.
-    #[from]
-    InvalidArrayLength(TryFromSliceError),
+    /// When byte array doesn't have the right size for a block hash
+    #[display("the given hash is not compatible with a block hash")]
+    WrongHashLength,
     /// Could not decode a string as `base58`
     #[from]
     Bs58Decoding(bs58::decode::Error),

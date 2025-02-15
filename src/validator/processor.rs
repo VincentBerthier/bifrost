@@ -3,7 +3,7 @@
 // Creation date: Saturday 08 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Friday 14 February 2025 @ 15:44:46
+// Last modified: Saturday 15 February 2025 @ 23:30:27
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -26,9 +26,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use std::sync::{Arc, LazyLock};
+use std::sync::Arc;
 
-use async_channel::{unbounded, Receiver, Sender};
 use tokio::{
     select,
     sync::{
@@ -39,55 +38,18 @@ use tokio::{
 };
 use tracing::{debug, info, instrument, trace, warn};
 
-use super::{Error, Result};
+use super::{transaction_queue::Status, Error, Result};
 use crate::{
     account::{AccountMeta, TransactionAccount, Wallet},
     crypto::Pubkey,
     io::Vault,
     program::dispatcher::dispatch,
     transaction::{CompiledInstruction, Transaction},
+    validator::transaction_queue::TRANSACTION_QUEUE,
 };
-
-static TRANSACTION_QUEUE: LazyLock<TransactionQueue> = LazyLock::new(TransactionQueue::new);
 
 const TRANSACTION_FEE: u64 = 5_000;
 const CURRENT_SLOT: u64 = 1;
-
-struct TransactionQueue {
-    sender: Arc<Sender<(Transaction, TSender<Status>)>>,
-    receiver: Arc<Receiver<(Transaction, TSender<Status>)>>,
-}
-
-impl TransactionQueue {
-    fn new() -> Self {
-        let (tx, rx) = unbounded();
-        Self {
-            sender: Arc::new(tx),
-            receiver: Arc::new(rx),
-        }
-    }
-
-    async fn send(&self, transaction: Transaction, status_tx: TSender<Status>) {
-        #[expect(
-            clippy::unwrap_used,
-            reason = "can only fail if the validator is terminated"
-        )]
-        self.sender.send((transaction, status_tx)).await.unwrap();
-    }
-
-    fn get_receiver(&self) -> Arc<Receiver<(Transaction, TSender<Status>)>> {
-        Arc::clone(&self.receiver)
-    }
-}
-
-#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
-enum Status {
-    Failed,
-    #[default]
-    Pending,
-    Running,
-    Succeeded,
-}
 
 #[instrument(skip_all)]
 async fn register_transaction(trx: Transaction) -> Result<TReceiver<Status>> {

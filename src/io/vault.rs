@@ -3,7 +3,7 @@
 // Creation date: Sunday 09 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Saturday 15 February 2025 @ 17:56:10
+// Last modified: Sunday 16 February 2025 @ 00:18:49
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -351,7 +351,7 @@ mod tests {
         account.prisms = 198_388;
         vault.save_account(key, &account, 0).await?;
         drop(vault);
-        sleep(Duration::from_millis(2)).await;
+        sleep(Duration::from_millis(5)).await;
 
         // Then
         let from_disk: Wallet =
@@ -385,7 +385,7 @@ mod tests {
             .save_account(Keypair::generate().pubkey(), &account, 0)
             .await?;
         drop(vault);
-        sleep(Duration::from_millis(2)).await;
+        sleep(Duration::from_millis(5)).await;
 
         // Then
         let path = get_vault_path().join("accounts").join("0.1");

@@ -3,7 +3,7 @@
 // Creation date: Friday 07 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Sunday 09 February 2025 @ 16:15:10
+// Last modified: Sunday 16 February 2025 @ 00:45:28
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -26,13 +26,13 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use std::fmt;
+use std::{fmt, str::FromStr};
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use ed25519_dalek::{VerifyingKey, SIGNATURE_LENGTH};
 use tracing::{debug, instrument};
 
-use super::{Pubkey, Result};
+use super::{Error, Pubkey, Result};
 
 /// The signature of a transaction.
 #[derive(Copy, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize, Hash)]
@@ -81,11 +81,27 @@ impl From<ed25519_dalek::Signature> for Signature {
     }
 }
 
+impl FromStr for Signature {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        let bytes = bs58::decode(s).into_vec()?;
+        let hash = bytes.try_into().map_err(|_err| Error::WrongHashLength)?;
+        Ok(Self { data: hash })
+    }
+}
+
 #[mutants::skip]
 impl fmt::Debug for Signature {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let encoded = bs58::encode(&self.data).into_string();
         write!(f, "{encoded}",)
+    }
+}
+
+impl AsRef<[u8]> for Signature {
+    fn as_ref(&self) -> &[u8] {
+        &self.data
     }
 }
 
@@ -97,14 +113,18 @@ mod tests {
 
     use test_log::test;
 
-    use crate::crypto::Keypair;
+    use crate::crypto::{Keypair, Signature};
 
-    type Error = Box<dyn core::error::Error>;
-    type TestResult = core::result::Result<(), Error>;
+    use super::super::Error;
+    type Result<T> = core::result::Result<T, Error>;
+    type TestResult = core::result::Result<(), Box<dyn core::error::Error>>;
 
     #[test]
     fn check_signature() -> TestResult {
         // Given
+        const SIG_ERROR: &str =
+            "C8i3iCwbBEj182CnWBnV3z9AAKSxVR2RJMgUFYXqUPfaHKJnHqsftgwNFJ81G9voNf";
+
         let message = b"some super important data for sure";
         let key1 = Keypair::generate();
         let pubkey1 = key1.pubkey();
@@ -113,6 +133,7 @@ mod tests {
 
         // When
         let signature = key1.sign(message);
+        let sig_error: Result<Signature> = SIG_ERROR.parse();
 
         // Then
         signature.verify(&pubkey1, message)?;
@@ -120,6 +141,7 @@ mod tests {
             signature.verify(&pubkey2, message),
             Err(super::super::Error::Signature(_))
         );
+        assert_matches!(sig_error, Err(Error::WrongHashLength));
 
         Ok(())
     }

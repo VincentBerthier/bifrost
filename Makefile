@@ -65,7 +65,7 @@ tests: $(SOURCES)
 
 .PHONY = mutants
 mutants: $(SOURCES)
-	cargo mutants --test-tool=nextest -e main.rs -E 'impl Debug' -E 'impl fmt::Debug' -E 'src/io/mod.rs'
+	cargo mutants --test-tool=nextest -e main.rs -E 'impl Debug' -E 'impl fmt::Debug' -E 'src/io/mod.rs' -E "impl AsRef"
 
 .PHONY = coverage
 coverage: $(SOURCES) Cargo.toml

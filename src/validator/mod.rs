@@ -3,7 +3,7 @@
 // Creation date: Saturday 08 February 2025
 // Author: Vincent Berthier <vincent.berthier@posteo.org>
 // -----
-// Last modified: Saturday 08 February 2025 @ 21:53:27
+// Last modified: Sunday 16 February 2025 @ 01:11:53
 // Modified by: Vincent Berthier
 // -----
 // Copyright (c) 2025 <Vincent Berthier>
@@ -26,8 +26,11 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+mod block;
+mod blockhash;
 mod error;
 mod processor;
+mod transaction_queue;
 
 pub use error::Error;
 type Result<T> = core::result::Result<T, Error>;
